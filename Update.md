@@ -2,7 +2,13 @@
 
 One-liners; most recent at top. Times approximate (local).
 
-## 2026-04-18 — Week 2 (Phase-1 PTQ)
+## 2026-04-18 — Week 2 (Phase-1 PTQ, in-session)
+
+- **17:45** · Paused Phase-1 runs — cluster load avg 216 (another `cs671_*` user running multi-worker PyTorch job, 1300% CPU per worker). Our run slowed from 1 s/img to 35 s/img at image 70/500. Killed background run; will resume when cluster cools.
+- **17:40** · Drafted paper-style README.md with full Phase-1 explanation (motivation, background on DeHamer + PTQ modes, setup, method §4.1–4.5, results table with placeholders, findings/limitations, repo layout). Sensitivity table already filled; quantization rows to fill after 500-image re-runs. → task #16 partial
+- **17:30** · Wrote `phase1_quantize/block_static_ptq.py` for eager-mode static PTQ on 9 CNN Sequential blocks (`E_block1..4`, `_block{1,3,4,5,7}`). Captures per-block calibration inputs via forward hooks on FP32 model, wraps each block in `QuantStub`/`DeQuantStub`, fuses Conv+ReLU pairs, prepare→calibrate→convert→splice. Saves converted state to `experiments/ptq/dehamer_block_static_indoor.pt`. → task #15 coded, not yet executed
+- **17:20** · Wrote `phase1_quantize/run_all_ptq.py` unifying FP32/dyn_all/dyn_mixed evaluation with JSON+CSV output. Mixed-precision variant reads top-K from `results/dehamer_sensitivity_indoor.json`. → task #14 coded; run paused
+
 
 - **17:15** · Pulled sensitivity JSON back; saved to `results/dehamer_sensitivity_indoor.json`.
 - **17:10** · Ran full sensitivity scan (`phase1_quantize/sensitivity.py`, 30 SOTS-indoor pairs, 26 Linear modules, ~9 min on cluster CPU). FP32 34.099 dB → all-INT8 34.050 dB (**Δ = -0.049 dB**). Top-5 most sensitive: `swin_1.layers.0.blocks.0.mlp.fc1` (+0.021), `.blocks.1.mlp.fc1` (+0.012), `.blocks.1.mlp.fc2` (+0.011), `layers.1.blocks.1.attn.proj` (+0.008), `layers.2.blocks.0.mlp.fc1` (+0.006). Findings: earliest stage most sensitive; MLP fc1 (4× expansion) > fc2 (projection). → task #13 ✓

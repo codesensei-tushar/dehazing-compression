@@ -142,6 +142,9 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
+# Cluster credentials (never commit)
+servers.csv
+
 # Environments
 .env
 .envrc

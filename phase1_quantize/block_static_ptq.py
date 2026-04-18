@@ -186,6 +186,8 @@ def main() -> None:
     ap.add_argument("--save-state", type=Path,
                     default=ROOT / "experiments/ptq/dehamer_block_static_indoor.pt")
     ap.add_argument("--skip-latency", action="store_true")
+    ap.add_argument("--top-k", type=int, default=5,
+                    help="Linear layers kept FP32 in the mixed-final composition.")
     args = ap.parse_args()
 
     # Pairs
@@ -241,34 +243,75 @@ def main() -> None:
           f"  {int8_m['ms_per_img']:.1f} ms/img  synth-256² {lat_int8}")
 
     d = int8_m["psnr_mean"] - fp32_m["psnr_mean"]
-    print(f"\nΔPSNR = {d:+.3f} dB")
+    print(f"\nΔPSNR (block-static vs FP32) = {d:+.3f} dB")
     if lat_fp32 and lat_int8:
-        print(f"Speedup = {lat_fp32 / lat_int8:.2f}×")
+        print(f"Speedup (block-static) = {lat_fp32 / lat_int8:.2f}×")
 
-    # Save spliced state for reuse in run_all_ptq.py
+    # --- Compose with dynamic Linear PTQ (all + mixed top-K FP32) ---
+    def load_sensitivity_top(k: int) -> list[str]:
+        p = ROOT / "results" / "dehamer_sensitivity_indoor.json"
+        if not p.exists():
+            return []
+        s = json.loads(p.read_text())
+        recs = sorted(s["per_module"], key=lambda r: r["delta_vs_baseline"], reverse=True)
+        return [r["module"] for r in recs[:k]]
+
+    print("\n--- INT8 block-static + dyn-all Linear ---")
+    composed_all = torch.quantization.quantize_dynamic(
+        deepcopy(spliced).cpu().eval(), {nn.Linear}, dtype=torch.qint8
+    )
+    composed_all_m = eval_model(composed_all, pairs)
+    lat_ca = None if args.skip_latency else cpu_latency(composed_all)
+    print(f"combined PSNR {composed_all_m['psnr_mean']:.3f} SSIM {composed_all_m['ssim_mean']:.4f}"
+          f"  {composed_all_m['ms_per_img']:.1f} ms/img  synth-256² {lat_ca}")
+
+    keep = set(load_sensitivity_top(args.top_k))
+    print(f"\n--- INT8 block-static + dyn-mixed (top-{args.top_k} Linear kept FP32) ---")
+    for k in sorted(keep):
+        print(f"  keep FP32: {k}")
+    # Build mixed from the spliced model: quantize all Linear, then restore top-K from FP32 copy.
+    composed_mixed = torch.quantization.quantize_dynamic(
+        deepcopy(spliced).cpu().eval(), {nn.Linear}, dtype=torch.qint8
+    )
+    for path in keep:
+        fp32_lin = fp32.get_submodule(path)
+        parts = path.split(".")
+        parent = composed_mixed
+        for p in parts[:-1]:
+            parent = getattr(parent, p)
+        setattr(parent, parts[-1], deepcopy(fp32_lin).cpu().eval())
+    composed_mixed_m = eval_model(composed_mixed, pairs)
+    lat_cm = None if args.skip_latency else cpu_latency(composed_mixed)
+    print(f"mixed-final PSNR {composed_mixed_m['psnr_mean']:.3f} SSIM {composed_mixed_m['ssim_mean']:.4f}"
+          f"  {composed_mixed_m['ms_per_img']:.1f} ms/img  synth-256² {lat_cm}")
+
+    # Save spliced state for reuse
     args.save_state.parent.mkdir(parents=True, exist_ok=True)
-    # Save the full spliced model state + qblock module (pickled together).
     torch.save({"state_dict": spliced.state_dict(),
-                "qblocks": {k: v for k, v in qblocks.items()}},
+                "qblocks_keys": list(qblocks.keys())},
                args.save_state, _use_new_zipfile_serialization=True)
-    print(f"wrote {args.save_state.relative_to(ROOT)}")
+    print(f"\nwrote {args.save_state.relative_to(ROOT)}")
 
-    # Persist JSON
+    # Persist JSON with all three INT8 rows
     out_json = ROOT / "results" / "dehamer_int8_block_static_indoor.json"
     out_json.parent.mkdir(parents=True, exist_ok=True)
     out_json.write_text(json.dumps({
         "model": "DeHamer",
-        "mode": "block-static",
+        "mode": "block-static + compositions",
         "backend": args.backend,
         "device": "cpu",
         "split": "indoor",
         "n_calib": len(calib_imgs),
         "n_eval": len(pairs),
+        "top_k_fp32": args.top_k,
         "n_params": n_params,
         "params_M": round(mM, 2),
         "blocks_quantized": list(qblocks.keys()),
-        "fp32": {**fp32_m, "latency_ms_256": lat_fp32},
-        "int8": {**int8_m, "latency_ms_256": lat_int8},
+        "fp32":              {**fp32_m,          "latency_ms_256": lat_fp32},
+        "int8_block_static": {**int8_m,          "latency_ms_256": lat_int8},
+        "int8_block_plus_dyn_all":     {**composed_all_m,   "latency_ms_256": lat_ca},
+        "int8_block_plus_dyn_mixed":   {**composed_mixed_m, "latency_ms_256": lat_cm,
+                                        "kept_fp32_linear": sorted(keep)},
     }, indent=2))
     print(f"wrote {out_json.relative_to(ROOT)}")
 
