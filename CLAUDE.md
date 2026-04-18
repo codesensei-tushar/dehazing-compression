@@ -176,9 +176,15 @@ Two machines, strict separation:
 
 **Local (`/home/tushar/dehazing-compression`)**
 - Code editing, Claude Code sessions, unit-level smoke tests.
-- Submodules cloned locally (code only, small — DeHamer/Restormer/NAFNet are each <100MB).
+- Submodules cloned locally (code only, small — DeHamer 9.3M, Restormer 4.7M, NAFNet 11M).
 - A tiny dummy dataset under `data/dummy/` (a handful of 256×256 hazy/clean pairs) for fast syntax/shape checks. Never the full RESIDE.
 - No checkpoints, no full datasets, no training runs.
+
+**Why keep a local base (hybrid rationale)**
+- Claude can only read/edit files locally. Without a local copy, every iteration becomes a sync + cluster-roundtrip.
+- Submodules are code-only (tens of MB total) — negligible disk cost for a large productivity win.
+- Local dummy-data smoke tests catch shape/import bugs before wasting cluster GPU time.
+- Cluster stays purely for the expensive work: full datasets, training, PTQ eval, long baselines.
 
 **Remote GPU cluster (connected via project-local `./gpu` script)**
 - Full datasets (RESIDE ITS/OTS/SOTS, Rain13K, GoPro) live ONLY here.
