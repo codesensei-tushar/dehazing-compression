@@ -1,0 +1,9 @@
+[submodule "third_party/dehamer"]
+	path = third_party/dehamer
+	url = https://github.com/Li-Chongyi/Dehamer
+[submodule "third_party/restormer"]
+	path = third_party/restormer
+	url = https://github.com/swz30/Restormer
+[submodule "third_party/nafnet"]
+	path = third_party/nafnet
+	url = https://github.com/megvii-research/NAFNet
