@@ -212,6 +212,15 @@ sshpass -p "$CLUSTER_PASSWORD" rsync -avz \
   "$CLUSTER_USER@$CLUSTER_HOST:dehazing-compression/results/" ./results/
 ```
 
+## Cluster Python environment
+
+- Conda base: `~/miniconda3` (cluster user `cs671_user16`).
+- Project env: **`dehaze`** — cloned from existing `myenv` (Python 3.10, torch 2.11 + CUDA).
+  - Clone was required because fresh `conda create` failed with SSL cert errors against `repo.anaconda.com`. Cloning avoids the conda channel entirely.
+- Extra pip deps installed into `dehaze` from pypi.org (pip works when given `-i https://pypi.org/simple --trusted-host pypi.org --trusted-host files.pythonhosted.org`): `timm`, `scikit-image`, `einops`, `gdown`, `ptflops`.
+- Activation: `source ~/miniconda3/etc/profile.d/conda.sh && conda activate dehaze`.
+- All commands invoked via `./gpu "<cmd>"` should prefix with that activation.
+
 ## GPU cluster allocation
 
 Free GPUs: 1 and 4 (~11GB used of 48GB). GPUs 0, 2, 3, 5, 6, 7 are occupied.

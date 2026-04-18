@@ -1,0 +1,15 @@
+{
+  "model": "DeHamer-FP32",
+  "split": "indoor",
+  "ckpt": "experiments/teachers/dehamer/ckpts/indoor/PSNR3663_ssim09881.pt",
+  "n_params": 132449787,
+  "params_M": 132.45,
+  "psnr_mean": 36.57568369240503,
+  "ssim_mean": 0.9861586802492041,
+  "n_images": 500,
+  "wall_time_s": 94.21264649699151,
+  "latency_ms_256": 25.90844970703125,
+  "latency_ms_512": 86.439580078125,
+  "fps_256": 38.59744644345168,
+  "fps_512": 11.568774386643126
+}
