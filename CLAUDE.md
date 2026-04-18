@@ -158,6 +158,90 @@ results/         committed: tables, figures
 7. Finish rain student. Run ablations. Full results table.
 8. Finish remaining sections. Qualitative figures. Submit.
 
+## Third-party dependencies (git submodules)
+
+No pip packages for DeHamer / Restormer / NAFNet — pin via submodules so versions freeze at the commit used for the paper (reproducibility).
+
+```
+git submodule add https://github.com/Li-Chongyi/Dehamer    third_party/dehamer
+git submodule add https://github.com/swz30/Restormer       third_party/restormer
+git submodule add https://github.com/megvii-research/NAFNet third_party/nafnet
+```
+
+In `models/teachers/dehamer.py`, `models/teachers/restormer.py`, `models/students/nafnet_student.py`: `sys.path.insert(0, 'third_party/<name>')` then import the model class. Only the model definitions + checkpoints are consumed; training code never touches the third-party repos.
+
+## Compute workflow — local dev + remote cluster
+
+Two machines, strict separation:
+
+**Local (`/home/tushar/dehazing-compression`)**
+- Code editing, Claude Code sessions, unit-level smoke tests.
+- Submodules cloned locally (code only, small — DeHamer/Restormer/NAFNet are each <100MB).
+- A tiny dummy dataset under `data/dummy/` (a handful of 256×256 hazy/clean pairs) for fast syntax/shape checks. Never the full RESIDE.
+- No checkpoints, no full datasets, no training runs.
+
+**Remote GPU cluster (connected via project-local `./gpu` script)**
+- Full datasets (RESIDE ITS/OTS/SOTS, Rain13K, GoPro) live ONLY here.
+- Teacher checkpoints, all training runs, PTQ eval.
+- Claude does NOT run on the cluster.
+- Transport is rsync, not GitHub — local is source of truth, pushed directly to cluster folder `dehazing-compression/`.
+
+**Credentials**
+- Stored in project-local `.env` (gitignored). `.env.example` at project root shows required keys: `CLUSTER_USER`, `CLUSTER_HOST`, `CLUSTER_PASSWORD`, `CLUSTER_REMOTE_DIR`.
+- `./gpu` and `./scripts/sync_to_cluster.sh` both source `.env` — do not hardcode credentials in any script.
+
+**Sync + run loop**
+```
+local:  git add … && git commit -m "…"
+        ./scripts/sync_to_cluster.sh                 # rsync project → cluster
+local:  ./gpu "cd dehazing-compression && python phase1_quantize/run_ptq.py"
+   or:  ./gpu                                        # interactive shell on cluster
+```
+
+Rsync excludes `.env`, `.git/`, `data/`, `experiments/`, `wandb/`, checkpoints. Pass `--delete` only when you want to mirror (wipes stale remote files). Data and checkpoints are never sent over rsync — they're downloaded directly on the cluster.
+
+**Pulling results back**
+```
+sshpass -p "$CLUSTER_PASSWORD" rsync -avz \
+  "$CLUSTER_USER@$CLUSTER_HOST:dehazing-compression/results/" ./results/
+```
+
+## GPU cluster allocation
+
+Free GPUs: 1 and 4 (~11GB used of 48GB). GPUs 0, 2, 3, 5, 6, 7 are occupied.
+
+| Job | GPU(s) | Command |
+|---|---|---|
+| PTQ eval (no training) | 1 | `CUDA_VISIBLE_DEVICES=1 python phase1_quantize/run_ptq.py` |
+| Student distillation | 4 | `CUDA_VISIBLE_DEVICES=4 python phase2_distill/train.py` |
+| Multi-GPU distillation (only if needed) | 1+4 | `CUDA_VISIBLE_DEVICES=1,4 torchrun --nproc_per_node=2 train.py` |
+
+NAFNet-32, batch 8, patch 128×128 fits comfortably in 11GB — student does NOT need multi-GPU. Reserve multi-GPU only if teacher is in the training loop.
+
+Preferred pattern: pre-generate teacher soft labels offline on GPU 1 (DeHamer forward on all ITS images → save PNGs), then train student on GPU 4 reading from disk. Decouples teacher inference from student training.
+
+## Experiment tracking — Weights & Biases
+
+Use W&B free academic tier. In `phase2_distill/train.py`:
+```python
+import wandb
+wandb.init(project="dehazing-compression", config=cfg)
+wandb.log({"psnr": val_psnr, "loss": loss})
+```
+Run comparisons + shareable links > manual log files when juggling experiments across the cluster.
+
+## .gitignore essentials
+```
+experiments/
+data/
+*.pth
+*.pt
+*.pkl
+__pycache__/
+wandb/
+```
+Commit: configs, code, `results/` tables. Never commit checkpoints or datasets.
+
 ## Risks & mitigations
 - Restormer fine-tune too slow → ITS only, 50K iters.
 - Student PSNR gap >2 dB → λ_feat 0.05, add perceptual loss, +50–100 epochs.
