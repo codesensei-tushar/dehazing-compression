@@ -1,7 +1,7 @@
 # dehazing-compression
 Dehazing Model Compression, Quantization + Condition-Specific Distillation for Real-Time Inference
 
-dehazing-compression/
+```dehazing-compression/
 │
 ├── configs/
 │   ├── ptq_dehamer.yaml
@@ -43,3 +43,4 @@ dehazing-compression/
 ├── results/               # tables, figures — committed
 ├── requirements.txt
 └── README.md
+```
