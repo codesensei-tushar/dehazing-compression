@@ -2,7 +2,22 @@
 
 One-liners; most recent at top. Times approximate (local).
 
-## 2026-04-18
+## 2026-04-18 — Week 2 (Phase-1 PTQ)
+
+- **17:15** · Pulled sensitivity JSON back; saved to `results/dehamer_sensitivity_indoor.json`.
+- **17:10** · Ran full sensitivity scan (`phase1_quantize/sensitivity.py`, 30 SOTS-indoor pairs, 26 Linear modules, ~9 min on cluster CPU). FP32 34.099 dB → all-INT8 34.050 dB (**Δ = -0.049 dB**). Top-5 most sensitive: `swin_1.layers.0.blocks.0.mlp.fc1` (+0.021), `.blocks.1.mlp.fc1` (+0.012), `.blocks.1.mlp.fc2` (+0.011), `layers.1.blocks.1.attn.proj` (+0.008), `layers.2.blocks.0.mlp.fc1` (+0.006). Findings: earliest stage most sensitive; MLP fc1 (4× expansion) > fc2 (projection). → task #13 ✓
+- **16:45** · Rewrote sensitivity scan to use quantize-all-then-swap-one-FP32 (class-swap trick didn't work — `quantize_dynamic` matches subclasses).
+- **16:35** · **FX static PTQ is blocked on DeHamer.** `prepare_fx` hits data-dependent control flow in `third_party/dehamer/src/swin.py` (runtime padding checks at L245/284/432/434). Patched DarkChannel via `models/teachers/dehamer_fx_patch.py`, but subsequent tracing errors mean patching the rest would be forking the model. Deferred. → task #12 paused
+- **16:25** · Wrote `phase1_quantize/static_ptq.py` (FX graph mode static PTQ scaffold with fbgemm, ITS calibration). Kept for later (eager-mode or torchao pt2e path).
+
+
+
+- **16:05** · Pulled `results/dehamer_int8_dynamic_indoor.json` back locally.
+- **16:00** · Ran full `phase1_quantize/run_ptq.py --mode dynamic --max-pairs 100` on cluster CPU: FP32 PSNR 35.046 / INT8 PSNR 34.979 (**ΔPSNR -0.067 dB**); CPU synth-latency @256² 211→196 ms (**1.08× speedup**). Only 26/354 layers quantized (all Swin Linear; 328 Conv2d stay FP32). Result persisted to `results/dehamer_int8_dynamic_indoor.json`. → tasks #10, #11 ✓
+- **15:55** · Wrote `phase1_quantize/run_ptq.py` supporting `--mode dynamic` (Linear→qint8); static mode stubbed for next step. Apples-to-apples CPU FP32 vs CPU INT8 (PyTorch dynamic PTQ is CPU-only). → task #10
+- **15:50** · Phase-1 finding staged: on a conv-dominated transformer, dynamic PTQ barely moves latency. Motivates static PTQ that can also quantize Conv2d.
+
+## 2026-04-18 — Week 1
 
 - **15:35** · Pulled `results/dehamer_fp32_indoor.json` back locally via rsync. ITS.zip (4.3G) finished downloading in background on cluster.
 - **15:30** · Ran Phase-1 FP32 baseline on cluster GPU 1 (A6000): **PSNR 36.58 / SSIM 0.9862** over 500 SOTS-indoor images in 94.2s. Latency 25.9 ms @256² (38.6 FPS), 86.4 ms @512² (11.6 FPS). Matches published numbers within 0.06 dB. → task #7 ✓

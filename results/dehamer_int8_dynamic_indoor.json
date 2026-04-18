@@ -1,0 +1,30 @@
+{
+  "model": "DeHamer",
+  "mode": "dynamic",
+  "device": "cpu",
+  "split": "indoor",
+  "n_images": 100,
+  "n_params": 132449787,
+  "params_M": 132.45,
+  "coverage": {
+    "linear_total": 26,
+    "conv_total": 328,
+    "linear_quantized": 26
+  },
+  "fp32": {
+    "psnr_mean": 35.046145020727124,
+    "ssim_mean": 0.9852921331333175,
+    "wall_s": 88.72122112699435,
+    "ms_per_img": 887.2122112699435,
+    "n": 100,
+    "latency_ms_256": 211.4313661993947
+  },
+  "int8": {
+    "psnr_mean": 34.978824640399665,
+    "ssim_mean": 0.9832379043558183,
+    "wall_s": 102.00818328199966,
+    "ms_per_img": 1020.0818328199965,
+    "n": 100,
+    "latency_ms_256": 196.02143480005907
+  }
+}

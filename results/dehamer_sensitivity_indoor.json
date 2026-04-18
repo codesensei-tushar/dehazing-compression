@@ -1,0 +1,196 @@
+{
+  "model": "DeHamer",
+  "mode": "dynamic-sensitivity",
+  "device": "cpu",
+  "split": "indoor",
+  "n_eval": 30,
+  "fp32_psnr": 34.098919994310826,
+  "fp32_ssim": 0.9812640088473407,
+  "int8_all_psnr": 34.04999290954848,
+  "int8_all_ssim": 0.9788214734616896,
+  "int8_all_drop_db": 0.048927084762347306,
+  "per_module": [
+    {
+      "module": "swin_1.layers.0.blocks.0.mlp.fc1",
+      "psnr": 34.07119333708844,
+      "ssim": 0.9796194757758959,
+      "delta_vs_baseline": 0.02120042753995932,
+      "delta_vs_fp32": -0.027726657222387985
+    },
+    {
+      "module": "swin_1.layers.0.blocks.1.mlp.fc1",
+      "psnr": 34.06162545445506,
+      "ssim": 0.9798733142324951,
+      "delta_vs_baseline": 0.01163254490658261,
+      "delta_vs_fp32": -0.0372945398557647
+    },
+    {
+      "module": "swin_1.layers.0.blocks.1.mlp.fc2",
+      "psnr": 34.06086911364142,
+      "ssim": 0.9791741031376014,
+      "delta_vs_baseline": 0.010876204092937769,
+      "delta_vs_fp32": -0.03805088066940954
+    },
+    {
+      "module": "swin_1.layers.1.blocks.1.attn.proj",
+      "psnr": 34.05753921018327,
+      "ssim": 0.9788509314312374,
+      "delta_vs_baseline": 0.007546300634793113,
+      "delta_vs_fp32": -0.04138078412755419
+    },
+    {
+      "module": "swin_1.layers.2.blocks.0.mlp.fc1",
+      "psnr": 34.055640270648496,
+      "ssim": 0.9788096192515288,
+      "delta_vs_baseline": 0.005647361100017179,
+      "delta_vs_fp32": -0.04327972366233013
+    },
+    {
+      "module": "swin_1.layers.0.blocks.0.mlp.fc2",
+      "psnr": 34.05541674083067,
+      "ssim": 0.9790046930238552,
+      "delta_vs_baseline": 0.005423831282193703,
+      "delta_vs_fp32": -0.0435032534801536
+    },
+    {
+      "module": "swin_1.layers.1.blocks.1.mlp.fc2",
+      "psnr": 34.053534947826456,
+      "ssim": 0.9788289911827549,
+      "delta_vs_baseline": 0.0035420382779776105,
+      "delta_vs_fp32": -0.045385046484369695
+    },
+    {
+      "module": "swin_1.layers.2.blocks.1.mlp.fc1",
+      "psnr": 34.053149713781416,
+      "ssim": 0.9788254875700457,
+      "delta_vs_baseline": 0.0031568042329368495,
+      "delta_vs_fp32": -0.045770280529410456
+    },
+    {
+      "module": "swin_1.layers.2.blocks.1.attn.qkv",
+      "psnr": 34.05254498637668,
+      "ssim": 0.9788296089163443,
+      "delta_vs_baseline": 0.0025520768282021322,
+      "delta_vs_fp32": -0.046375007934145174
+    },
+    {
+      "module": "swin_1.layers.2.blocks.0.attn.qkv",
+      "psnr": 34.05253693795638,
+      "ssim": 0.9788374245445124,
+      "delta_vs_baseline": 0.002544028407903909,
+      "delta_vs_fp32": -0.0463830563544434
+    },
+    {
+      "module": "swin_1.layers.2.blocks.0.mlp.fc2",
+      "psnr": 34.05180508867192,
+      "ssim": 0.9788214808646256,
+      "delta_vs_baseline": 0.0018121791234406714,
+      "delta_vs_fp32": -0.047114905638906635
+    },
+    {
+      "module": "swin_1.layers.2.blocks.1.attn.proj",
+      "psnr": 34.051150971871515,
+      "ssim": 0.978829945741758,
+      "delta_vs_baseline": 0.0011580623230358356,
+      "delta_vs_fp32": -0.04776902243931147
+    },
+    {
+      "module": "swin_1.layers.0.blocks.0.attn.proj",
+      "psnr": 34.04965132795902,
+      "ssim": 0.9788632193001982,
+      "delta_vs_baseline": -0.0003415815894598495,
+      "delta_vs_fp32": -0.049268666351807155
+    },
+    {
+      "module": "swin_1.layers.1.blocks.0.mlp.fc1",
+      "psnr": 34.049294444693565,
+      "ssim": 0.9787991973057671,
+      "delta_vs_baseline": -0.0006984648549135386,
+      "delta_vs_fp32": -0.049625549617260845
+    },
+    {
+      "module": "swin_1.layers.2.blocks.0.attn.proj",
+      "psnr": 34.04802992091781,
+      "ssim": 0.978812094643128,
+      "delta_vs_baseline": -0.0019629886306660183,
+      "delta_vs_fp32": -0.050890073393013324
+    },
+    {
+      "module": "swin_1.layers.1.blocks.1.attn.qkv",
+      "psnr": 34.047504535136994,
+      "ssim": 0.9788327706868166,
+      "delta_vs_baseline": -0.0024883744114845285,
+      "delta_vs_fp32": -0.051415459173831835
+    },
+    {
+      "module": "swin_1.layers.0.blocks.0.attn.qkv",
+      "psnr": 34.04717031536791,
+      "ssim": 0.9787286802006175,
+      "delta_vs_baseline": -0.002822594180571514,
+      "delta_vs_fp32": -0.05174967894291882
+    },
+    {
+      "module": "swin_1.layers.2.blocks.1.mlp.fc2",
+      "psnr": 34.045922475880225,
+      "ssim": 0.9788196962107134,
+      "delta_vs_baseline": -0.00407043366825377,
+      "delta_vs_fp32": -0.052997518430601076
+    },
+    {
+      "module": "swin_1.layers.0.blocks.1.attn.qkv",
+      "psnr": 34.04532768736429,
+      "ssim": 0.9788425135409878,
+      "delta_vs_baseline": -0.004665222184186746,
+      "delta_vs_fp32": -0.05359230694653405
+    },
+    {
+      "module": "swin_1.layers.1.blocks.0.mlp.fc2",
+      "psnr": 34.04499686219166,
+      "ssim": 0.9788267457110142,
+      "delta_vs_baseline": -0.004996047356819133,
+      "delta_vs_fp32": -0.05392313211916644
+    },
+    {
+      "module": "swin_1.layers.1.blocks.0.attn.qkv",
+      "psnr": 34.04444219136322,
+      "ssim": 0.9788165801068682,
+      "delta_vs_baseline": -0.0055507181852618714,
+      "delta_vs_fp32": -0.05447780294760918
+    },
+    {
+      "module": "swin_1.layers.1.blocks.0.attn.proj",
+      "psnr": 34.0424668241882,
+      "ssim": 0.9787483430187816,
+      "delta_vs_baseline": -0.007526085360275658,
+      "delta_vs_fp32": -0.056453170122622964
+    },
+    {
+      "module": "swin_1.layers.0.blocks.1.attn.proj",
+      "psnr": 34.04239439613587,
+      "ssim": 0.9788399982265952,
+      "delta_vs_baseline": -0.007598513412609975,
+      "delta_vs_fp32": -0.05652559817495728
+    },
+    {
+      "module": "swin_1.layers.1.blocks.1.mlp.fc1",
+      "psnr": 34.04069915207573,
+      "ssim": 0.9787948674093571,
+      "delta_vs_baseline": -0.009293757472747188,
+      "delta_vs_fp32": -0.058220842235094494
+    },
+    {
+      "module": "swin_1.layers.1.downsample.reduction",
+      "psnr": 34.03914423489436,
+      "ssim": 0.9788111871593761,
+      "delta_vs_baseline": -0.010848674654120316,
+      "delta_vs_fp32": -0.05977575941646762
+    },
+    {
+      "module": "swin_1.layers.0.downsample.reduction",
+      "psnr": 34.03560018829264,
+      "ssim": 0.9788765171976647,
+      "delta_vs_baseline": -0.014392721255838126,
+      "delta_vs_fp32": -0.06331980601818543
+    }
+  ]
+}
