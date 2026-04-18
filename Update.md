@@ -4,6 +4,13 @@ One-liners; most recent at top. Times approximate (local).
 
 ## 2026-04-18 — Week 2 (Phase-1 PTQ, in-session)
 
+- **18:20** · Launched Phase-1 full suite in tmux `phase1` on teaching@172.18.40.119. Stage 1 (`run_all_ptq.py fp32 dyn_all dyn_mixed --top-k 5 --n-eval 0`) started. Stage 2 (`block_static_ptq.py --n-calib 100 --n-eval 0 --top-k 5`) will run sequentially. Status file `results/phase1_status.txt`; logs `phase1_runall.log`, `phase1_block_static.log`. Attach: `./gpu "tmux attach -t phase1"`.
+- **18:15** · Bootstrapped new node: synced project (~9 MB), downloaded DeHamer indoor ckpt (512 MB) and SOTS (435 MB, unzipped → 500 indoor pairs) via gdown. Smoke test passed: 132.45M params, CUDA forward OK on A5000.
+- **18:05** · Installed missing pip extras in `adu`: `scikit-image`, `einops`, `gdown` (torch/timm/PIL/yaml/tqdm already present).
+- **17:55** · Switched active compute target to `teaching@172.18.40.119` (hostname `dslab`). 32 cores, 125 GB RAM, 1× RTX A5000, load 0.13, pre-existing `adu` conda env with torch 2.7.1+cu118. Parked 10.8.1.106 creds as `.env.10.8.1.106`.
+- **17:50** · Wrote `scripts/monitor_nodes.py` (paramiko concurrent probe of all 49 credentials in `servers.csv`). Report: 10.8.1.106 at 100% CPU & load 183 on 64 cores (other users); ~30 `teaching@172.18.40.*` nodes at load < 1, each 32 cores + 1 GPU. Picker uses load/core + CPU + RAM + GPU% fitness score.
+- **17:45** · Saved full cluster roster (49 rows) as `servers.csv` (gitignored). Added `scripts/launch_phase1_tmux.sh` (OMP_NUM_THREADS=16, tee'd logs, status file) and `scripts/phase1_status.sh` (remote status probe).
+
 - **17:45** · Paused Phase-1 runs — cluster load avg 216 (another `cs671_*` user running multi-worker PyTorch job, 1300% CPU per worker). Our run slowed from 1 s/img to 35 s/img at image 70/500. Killed background run; will resume when cluster cools.
 - **17:40** · Drafted paper-style README.md with full Phase-1 explanation (motivation, background on DeHamer + PTQ modes, setup, method §4.1–4.5, results table with placeholders, findings/limitations, repo layout). Sensitivity table already filled; quantization rows to fill after 500-image re-runs. → task #16 partial
 - **17:30** · Wrote `phase1_quantize/block_static_ptq.py` for eager-mode static PTQ on 9 CNN Sequential blocks (`E_block1..4`, `_block{1,3,4,5,7}`). Captures per-block calibration inputs via forward hooks on FP32 model, wraps each block in `QuantStub`/`DeQuantStub`, fuses Conv+ReLU pairs, prepare→calibrate→convert→splice. Saves converted state to `experiments/ptq/dehamer_block_static_indoor.pt`. → task #15 coded, not yet executed

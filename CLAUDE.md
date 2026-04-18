@@ -214,12 +214,33 @@ sshpass -p "$CLUSTER_PASSWORD" rsync -avz \
 
 ## Cluster Python environment
 
-- Conda base: `~/miniconda3` (cluster user `cs671_user16`).
-- Project env: **`dehaze`** — cloned from existing `myenv` (Python 3.10, torch 2.11 + CUDA).
-  - Clone was required because fresh `conda create` failed with SSL cert errors against `repo.anaconda.com`. Cloning avoids the conda channel entirely.
-- Extra pip deps installed into `dehaze` from pypi.org (pip works when given `-i https://pypi.org/simple --trusted-host pypi.org --trusted-host files.pythonhosted.org`): `timm`, `scikit-image`, `einops`, `gdown`, `ptflops`.
-- Activation: `source ~/miniconda3/etc/profile.d/conda.sh && conda activate dehaze`.
-- All commands invoked via `./gpu "<cmd>"` should prefix with that activation.
+### Active compute target: `teaching@172.18.40.119` (dslab)
+- **Reason:** `10.8.1.106` (cs671 host) is saturated by other users (load avg 180+). Teaching nodes at `172.18.40.*` are separate physical hosts with idle CPU + GPU.
+- Env: pre-existing **`adu`** conda env at `/home/teaching/miniconda3/envs/adu/` (Python 3.11, torch 2.7.1 + cu118).
+- GPU: 1× NVIDIA RTX A5000. CPU: 32 cores. RAM: 125 GB.
+- No `conda` binary on PATH — invoke the env's Python directly: `/home/teaching/miniconda3/envs/adu/bin/python`.
+- Extras installed: `scikit-image`, `einops`, `gdown` (pre-existing: `torch timm PIL tqdm yaml`).
+
+### Credentials layout
+- `.env` holds the **active** cluster's creds (gitignored).
+- `.env.10.8.1.106` is a parked backup for the saturated primary cluster.
+- Full cluster roster (30+ `teaching@172.18.40.*` nodes + cs671 users on 10.8.1.106) lives in `servers.csv` (gitignored).
+- `scripts/monitor_nodes.py` probes the full roster and reports CPU / RAM / GPU load; use this to re-select when the active node gets loaded.
+
+### Switching nodes
+```bash
+# Probe everything
+python scripts/monitor_nodes.py --json results/cluster_status.json
+# Pick best row, edit .env to point at its user/host/password
+./gpu "echo connected as \$(whoami) on \$(hostname)"     # verify
+./scripts/sync_to_cluster.sh
+# Re-install extras if the new node's env lacks them.
+```
+
+### Legacy (10.8.1.106)
+- Conda env: `dehaze` (cloned from `myenv`, py 3.10, torch 2.11 + cu130).
+- Still populated with the full teacher-checkpoint set + ITS.zip + unzipped SOTS under `/usershome/cs671_user16/dehazing-compression/`.
+- Switch back by restoring `.env.10.8.1.106` → `.env`.
 
 ## GPU cluster allocation
 

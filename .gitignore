@@ -147,6 +147,7 @@ servers.csv
 
 # Environments
 .env
+.env.10.8.1.106
 .envrc
 .venv
 env/
