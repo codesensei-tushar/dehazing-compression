@@ -2,6 +2,13 @@
 
 One-liners; most recent at top. Times approximate (local).
 
+## 2026-04-18 — Phase-2 kick-off
+
+- **19:10** · Phase-2 pipeline queued. Active chain on teaching@172.18.40.119: `its_dl` tmux downloads ITS (4.56G, ~35 MB/s, in progress) → unzips → hands off to `bash scripts/launch_phase2_tmux.sh 200 haze_s1` which opens tmux `phase2` and runs Stage 1 (soft labels on all 13,990 ITS via DeHamer GPU) then Stage 2 (NAFNet student training, 200 epochs, batch 8, patch 128, AdamW 1e-3 cosine, λ_feat 0.01). Overnight-capable; logs under `results/phase2_*.{log,txt}`.
+- **19:05** · Pushed phase-2 scaffold commit to GitHub: `data/reside.py`, `models/students/nafnet_student.py`, `phase2_distill/{losses.py,train.py}`, `scripts/{gen_soft_labels.py,launch_phase2_tmux.sh}`. Fixed `.env` sourcing (eval only KEY=VALUE lines) so the sync/gpu scripts tolerate free-form notes in `.env`.
+- **19:00** · **NAFNet student param target reconciled.** Project spec said `width=32, [1,1,1,28], ~2.6M` — actual measurement shows that config is 17.11M. Adopted `width=16, [1,1,1,28], 4.35M` (30× compression vs DeHamer 132.45M, 6× vs Restormer 26.1M). Architectural intent (deep trunk) preserved; param count honest. Documented in `nafnet_student.py` module docstring.
+- **18:50** · Wrote losses (`DistillationLoss(L1 + λ_feat·L2 + λ_perc·VGG)`), ITS paired dataloader with 128² crops + flips + 90° rotations, SOTS eval loader (mod-8 crop), and full training loop with cosine LR, grad-clip, W&B-optional, resume, best-PSNR checkpointing.
+
 ## 2026-04-18 — Phase-1 LOCKED
 
 - **18:30** · **Phase-1 numbers locked.** README §5 rewritten with the full 6-row table on SOTS-indoor 500 pairs: FP32 36.576 dB, INT8-dyn-all 36.470 (−0.105), INT8-dyn-mixed-top5 **36.551 (−0.025, 1.27× CPU speedup — paper headline)**, INT8-block-static 34.545 (−2.031), block+dyn_all 34.487 (−2.089), block+dyn_mixed 34.524 (−2.052). §6 expanded with recommendation + documented negative result on block-wise static PTQ of CNN blocks. → tasks #14, #15 ✓
