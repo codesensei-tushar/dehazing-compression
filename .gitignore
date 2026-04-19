@@ -4,7 +4,9 @@ __pycache__/
 *$py.class
 
 experiments/
-data/
+data/*
+!data/*.py
+!data/__init__.py
 *.pth
 *.pt
 *.pkl

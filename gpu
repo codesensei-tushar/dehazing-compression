@@ -15,8 +15,8 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
+# Parse only KEY=VALUE lines so comments / free-form text in .env are safe.
+eval "$(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$ENV_FILE")"
 set +a
 
 : "${CLUSTER_USER:?CLUSTER_USER not set in .env}"
