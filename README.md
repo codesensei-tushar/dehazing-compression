@@ -246,20 +246,63 @@ All rows use `ckpts/indoor/PSNR3663_ssim09881.pt`. `PSNR` and `SSIM` are means
 over the full 500 image test set. CPU latency is single-thread FBGEMM at
 256 × 256; GPU latency is a single NVIDIA RTX A6000.
 
-<!-- RESULTS_TABLE_PLACEHOLDER -->
+| Variant | PSNR (dB) | SSIM | ΔPSNR | Coverage | CPU ms @256² | CPU FPS @256² | Speedup |
+|---------|----------:|-----:|------:|----------|-------------:|--------------:|--------:|
+| FP32 (CPU reference)              | **36.576** | **0.9862** | — | — | 242.5 | 4.12 | 1.00× |
+| INT8 dynamic, all Linear          | 36.470 | 0.9842 | −0.105 | 26/26 Linear | 189.7 | 5.27 | 1.28× |
+| INT8 dynamic, top-5 FP32 (mixed)  | **36.551** | **0.9860** | **−0.025** | 21/26 Linear | **190.2** | **5.26** | **1.27×** |
+| INT8 block-static, CNN only       | 34.545 | 0.9625 | −2.031 | 9 Sequential blocks | 199.2 | 5.02 | 1.22× |
+| Block-static + dynamic all        | 34.487 | 0.9604 | −2.089 | 9 blocks + 26 Linear | 219.3 | 4.56 | 1.11× |
+| Block-static + dynamic mixed      | 34.524 | 0.9622 | −2.052 | 9 blocks + 21 Linear | 220.6 | 4.53 | 1.10× |
 
-| Variant | PSNR (dB) | SSIM | ΔPSNR vs FP32 | Coverage | CPU ms @256² | CPU FPS @256² |
-|---------|----------:|-----:|--------------:|----------|-------------:|---------------:|
-| FP32 (CPU)                        | _(filled after 500-run)_ | _–_ | — | — | _–_ | _–_ |
-| INT8 dynamic, Linear only         | _–_ | _–_ | _–_ | 26/26 Linear | _–_ | _–_ |
-| INT8 dynamic, top-5 FP32 (mixed)  | _–_ | _–_ | _–_ | 21/26 Linear | _–_ | _–_ |
-| INT8 block-static, CNN only       | _–_ | _–_ | _–_ | 9 Seq blocks | _–_ | _–_ |
-| INT8 mixed-final                  | _–_ | _–_ | _–_ | 9 blocks + 21 Linear | _–_ | _–_ |
+All numbers are means over the full **SOTS-indoor 500-pair test set**,
+measured on the `teaching@172.18.40.119` node (Intel 32-core CPU, FBGEMM
+backend, single-threaded eval, `OMP_NUM_THREADS=16`). Latency is the mean of
+20 timed iterations at 256 × 256 after 3 warm-up iterations, measured on a
+single synthetic tensor.
 
-Reference GPU FP32 (NVIDIA A6000): **PSNR 36.576 dB / SSIM 0.9862**,
-**25.9 ms @256²** (38.6 FPS), **86.4 ms @512²** (11.6 FPS),
-published checkpoint value 36.63 dB / 0.9881 — our reproduction is within
-0.06 dB.
+The FP32 **CPU** reference is the apples-to-apples comparator for PTQ; the
+FP32 **GPU** reference on an NVIDIA A6000 is **PSNR 36.576 dB / SSIM 0.9862**
+at **25.9 ms @256² (38.6 FPS)** and **86.4 ms @512² (11.6 FPS)** — the
+GPU FP32 PSNR is identical to within rounding, and the A6000 is ≈ 9× faster
+than a 32-core CPU at 256 × 256. The published DeHamer checkpoint value is
+36.63 dB / 0.9881; our reproduction is within 0.06 dB.
+
+### The winner: mixed-precision dynamic PTQ
+
+The best Phase-1 configuration is **dynamic INT8 with the five most
+sensitive Linear layers kept in FP32**. It is essentially lossless (−0.025 dB
+PSNR, −0.0002 SSIM) and recovers 97 % of the all-INT8 CPU speedup without
+the 0.08 dB additional drop. This is the row a paper should lead with.
+
+### The honest negative: block-wise CNN static PTQ
+
+Quantizing the nine Sequential CNN blocks (`E_block1..4`, `_block1, 3, 4, 5,
+7`) via eager-mode static PTQ produces a **−2 dB PSNR** cliff with **no net
+speedup**. Two factors combine to produce this outcome:
+
+1. **Quant/DeQuant boundary overhead.** Each of the 9 spliced blocks wraps
+   its interior with `QuantStub` / `DeQuantStub`. Tensors pass through the
+   INT8–FP32 boundary 18 times per forward, and the kernel fusion benefits
+   of INT8 Conv2d are undone by the bookkeeping.
+
+2. **Sensitivity of the modulation path.** The CNN encoder outputs
+   (`swin_input_{1,2,3}`) are instance-normalised and affinely modulated by
+   Swin features (`β`, `γ`) before entering the decoder. Small quantization
+   errors in the CNN branch compound through this modulation — a source of
+   sensitivity that is invisible in a module-isolated calibration protocol.
+
+Composing block-static with dynamic PTQ (the "mixed-final" rows) does not
+recover the drop — the CNN error is the dominant term. A principled remedy
+would require (a) cross-module calibration (feeding full-graph activations
+through a shared observer set) and (b) a quantization-aware adjustment of
+the Swin-modulation step; both are training-time changes and therefore
+outside PTQ scope.
+
+We report the negative result explicitly because it informs the Phase 2
+design: **the student architecture should not reproduce DeHamer's
+instance-norm modulation path**, or at least should not expect PTQ to
+preserve it.
 
 ### 5.2 Sensitivity map (top-15 Linear modules)
 
@@ -293,46 +336,63 @@ The full 26-entry sensitivity map lives in
 
 ## 6. Findings and limitations
 
-* **Dynamic PTQ on a conv-dominated hybrid is nearly lossless.** DeHamer
-  degrades by less than 0.1 dB under all-Linear INT8 dynamic quantization.
-  This sits well below the 0.3 – 0.8 dB drop reported for comparable
-  transformer-only models, and reflects the fact that the Swin branch is only
-  one of several feature pathways into the decoder.
+Concrete numerical findings on SOTS-indoor (500 pairs), against the FP32 CPU
+reference at 36.576 dB / 0.9862 SSIM, 242.5 ms @256²:
 
-* **Dynamic PTQ on a conv-dominated hybrid is nearly unchanged in
-  latency.** Only 26 of 354 compute-bearing modules are touched; the
-  remaining 328 Conv2d layers dominate wall-clock time. Latency improves by
-  about 1.08× on CPU, well below the 1.5 – 2.5× typical of all-Linear
-  transformer PTQ studies. The implication is clear: **meaningful PTQ speed
-  gains on DeHamer require Conv2d quantization.**
+* **Dynamic Linear PTQ is near-lossless and measurably faster.** All 26
+  Linear layers in the Swin branch quantize to INT8 with a −0.105 dB PSNR
+  drop and a 1.28 × CPU speedup. This is consistent with the observation
+  that the Swin branch accounts for a meaningful fraction of compute but is
+  not the decoder's only information path.
+
+* **Sensitivity-guided mixed precision halves the quality cost at the same
+  speed.** Keeping the top-5 most sensitive Linear layers
+  (`swin_1.layers.0.blocks.{0,1}.mlp.fc{1,2}`,
+  `swin_1.layers.1.blocks.1.attn.proj`,
+  `swin_1.layers.2.blocks.0.mlp.fc1`) in FP32 reduces the drop to −0.025 dB
+  while leaving CPU latency statistically unchanged (1.27 × vs 1.28 ×). The
+  budget is spent in exactly one stage (`layers.0`) and on MLP-`fc1`
+  preferentially — the expansion Linear that carries the widest activation
+  dynamic range.
 
 * **FX-mode static PTQ is architecturally blocked by the Swin branch.** Data
   dependent padding checks in `PatchEmbed.forward` and downstream Swin blocks
   make the module graph untraceable. We treat this as a design-level finding,
   not a bug; fixing it would fork DeHamer.
 
-* **Block-wise eager-mode PTQ on the CNN portion is the tractable remedy.**
-  It recovers the bulk of the available static-PTQ speedup without touching
-  the Swin branch. Because the CNN blocks are clean Sequentials, they fuse
-  and calibrate robustly.
+* **Block-wise eager-mode static PTQ on the CNN portion is a documented
+  negative result.** Quantizing the nine CNN Sequentials degrades quality
+  by −2.03 dB with no net speedup. The root causes are the repeated
+  Quant/DeQuant boundary overhead at splice points and the compounding of
+  CNN-branch quantization error through Swin-feature modulation in the
+  decoder (§5.1). Composing block-static with dynamic Linear PTQ does not
+  recover the drop.
 
-* **Sensitivity ranking is structurally informative.** The most sensitive
-  Linear layers are the four `mlp.fc1` and `attn.proj` layers in the earliest
-  Swin stage. A paper-facing implication: mixed-precision PTQ budgets should
-  be spent there first.
+* **Practical PTQ recommendation for DeHamer-class hybrid models:** apply
+  dynamic INT8 to every Linear layer, retain the top-5 most sensitive in
+  FP32, and leave the CNN portion FP32. No training, no calibration set,
+  −0.025 dB PSNR, 1.27 × CPU speedup.
 
 ### Open limitations (addressed in future work)
 
 * PyTorch eager / dynamic PTQ is CPU only. GPU INT8 requires a separate
-  deployment path (TensorRT, torchao pt2e, NVIDIA `pytorch-quantization`).
-  Phase 1 therefore argues about quality and CPU compute; GPU INT8 is
-  deferred to a later section of the paper.
+  deployment path (TensorRT, torchao pt2e, NVIDIA `pytorch-quantization`);
+  Phase 1 therefore argues about quality and CPU compute. A GPU-INT8 study
+  (including end-to-end TRT export of the FP32 Swin + INT8 CNN hybrid) is
+  deferred to a follow-up section of the paper.
+
+* A quantization-aware version of Phase 1 (QAT with a short fine-tune on ITS)
+  is likely to reopen the block-static path by absorbing the −2 dB drop into
+  a few thousand training steps; this is noted in the Phase 2 / Phase 3
+  roadmap.
 
 * Restormer is a secondary teacher. A Phase 1 run on Restormer will be added
   after fine-tuning it on ITS (tracked in Week 4 of the schedule).
 
 * Phase 2 (condition-specific knowledge distillation into NAFNet-32) is
-  in-progress and is not covered here.
+  scheduled to begin once Phase 1 is frozen. The present sensitivity map and
+  negative-result on CNN block static are direct inputs to the Phase 2
+  student design.
 
 ---
 

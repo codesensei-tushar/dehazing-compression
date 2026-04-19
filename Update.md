@@ -2,6 +2,11 @@
 
 One-liners; most recent at top. Times approximate (local).
 
+## 2026-04-18 — Phase-1 LOCKED
+
+- **18:30** · **Phase-1 numbers locked.** README §5 rewritten with the full 6-row table on SOTS-indoor 500 pairs: FP32 36.576 dB, INT8-dyn-all 36.470 (−0.105), INT8-dyn-mixed-top5 **36.551 (−0.025, 1.27× CPU speedup — paper headline)**, INT8-block-static 34.545 (−2.031), block+dyn_all 34.487 (−2.089), block+dyn_mixed 34.524 (−2.052). §6 expanded with recommendation + documented negative result on block-wise static PTQ of CNN blocks. → tasks #14, #15 ✓
+- **18:15** · `PHASE1_DONE` on teaching@172.18.40.119 at 18:09:41 IST. Stage 1 took 22 min (17:14→17:37), Stage 2 took 32 min (17:37→18:09). Pulled 11 artefacts to local `results/`.
+
 ## 2026-04-18 — Week 2 (Phase-1 PTQ, in-session)
 
 - **18:20** · Launched Phase-1 full suite in tmux `phase1` on teaching@172.18.40.119. Stage 1 (`run_all_ptq.py fp32 dyn_all dyn_mixed --top-k 5 --n-eval 0`) started. Stage 2 (`block_static_ptq.py --n-calib 100 --n-eval 0 --top-k 5`) will run sequentially. Status file `results/phase1_status.txt`; logs `phase1_runall.log`, `phase1_block_static.log`. Attach: `./gpu "tmux attach -t phase1"`.

@@ -1,0 +1,46 @@
+{
+  "model": "DeHamer",
+  "split": "indoor",
+  "ckpt": "experiments/teachers/dehamer/ckpts/indoor/PSNR3663_ssim09881.pt",
+  "n_params": 132449787,
+  "params_M": 132.45,
+  "top_k_fp32": 5,
+  "rows": [
+    {
+      "variant": "fp32",
+      "psnr_mean": 36.575581052090634,
+      "ssim_mean": 0.9861568648319576,
+      "psnr_min": 31.132098376523988,
+      "psnr_max": 44.30656924793409,
+      "wall_s": 437.83130341907963,
+      "ms_per_img": 875.6626068381593,
+      "n": 500,
+      "latency_ms_256": 242.54791415296495,
+      "quant_coverage": "-"
+    },
+    {
+      "variant": "int8_dyn_all",
+      "psnr_mean": 36.470272099763854,
+      "ssim_mean": 0.984249921249399,
+      "psnr_min": 31.09398688417109,
+      "psnr_max": 43.795808853230255,
+      "wall_s": 483.96694391197525,
+      "ms_per_img": 967.9338878239505,
+      "n": 500,
+      "latency_ms_256": 189.73372525069863,
+      "quant_coverage": "26/26 Linear"
+    },
+    {
+      "variant": "int8_dyn_mixed_top5",
+      "psnr_mean": 36.55122534835501,
+      "ssim_mean": 0.9860385450554539,
+      "psnr_min": 31.055552893965302,
+      "psnr_max": 44.22417972221987,
+      "wall_s": 403.9120999430306,
+      "ms_per_img": 807.8241998860613,
+      "n": 500,
+      "latency_ms_256": 190.2105656976346,
+      "quant_coverage": "21/26 Linear"
+    }
+  ]
+}

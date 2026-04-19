@@ -1,0 +1,58 @@
+{
+  "model": "DeHamer",
+  "mode": "block-static + compositions",
+  "backend": "fbgemm",
+  "device": "cpu",
+  "split": "indoor",
+  "n_calib": 100,
+  "n_eval": 500,
+  "top_k_fp32": 5,
+  "n_params": 132449787,
+  "params_M": 132.45,
+  "blocks_quantized": [
+    "E_block1",
+    "E_block2",
+    "E_block3",
+    "E_block4",
+    "_block1",
+    "_block3",
+    "_block4",
+    "_block5",
+    "_block7"
+  ],
+  "fp32": {
+    "psnr_mean": 36.575581052090634,
+    "ssim_mean": 0.9861568648319576,
+    "ms_per_img": 927.1487167601008,
+    "n": 500,
+    "latency_ms_256": 194.0566065022722
+  },
+  "int8_block_static": {
+    "psnr_mean": 34.54456182719031,
+    "ssim_mean": 0.962495222669036,
+    "ms_per_img": 913.7694435219746,
+    "n": 500,
+    "latency_ms_256": 199.2064498947002
+  },
+  "int8_block_plus_dyn_all": {
+    "psnr_mean": 34.48671591088789,
+    "ssim_mean": 0.9604378072271194,
+    "ms_per_img": 914.990714318119,
+    "n": 500,
+    "latency_ms_256": 219.30731419706717
+  },
+  "int8_block_plus_dyn_mixed": {
+    "psnr_mean": 34.5237857845214,
+    "ssim_mean": 0.9622203369061018,
+    "ms_per_img": 882.6293501278851,
+    "n": 500,
+    "latency_ms_256": 220.6249036011286,
+    "kept_fp32_linear": [
+      "swin_1.layers.0.blocks.0.mlp.fc1",
+      "swin_1.layers.0.blocks.1.mlp.fc1",
+      "swin_1.layers.0.blocks.1.mlp.fc2",
+      "swin_1.layers.1.blocks.1.attn.proj",
+      "swin_1.layers.2.blocks.0.mlp.fc1"
+    ]
+  }
+}
