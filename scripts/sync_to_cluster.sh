@@ -38,8 +38,10 @@ echo "Syncing $PROJECT_DIR/ -> $CLUSTER_USER@$CLUSTER_HOST:$REMOTE_DIR/"
 
 sshpass -p "$CLUSTER_PASSWORD" rsync -avz "${EXTRA_FLAGS[@]}" \
   --exclude=".env" \
+  --exclude=".env.*" \
+  --exclude="servers.csv" \
   --exclude=".git/" \
-  --exclude="data/" \
+  --include="data/" --include="data/*.py" --exclude="data/*" \
   --exclude="experiments/" \
   --exclude="wandb/" \
   --exclude="__pycache__/" \

@@ -2,6 +2,18 @@
 
 One-liners; most recent at top. Times approximate (local).
 
+## 2026-04-21 — Phase-2 three-way parallel launch
+
+- **10:50** · All 3 training runs confirmed live (see `python scripts/phase2_multi_status.py`):
+  - **A** `haze_a_small_tight` @ 172.18.40.119 (tmux `phase2_haze_a_small_tight`), ~9.5 it/s
+  - **B** `haze_b_large_tight` @ 172.18.40.115 (tmux `phase2_haze_b_large_tight`), ~12.7 it/s
+  - **C** `haze_c_large_pseudo` @ 172.18.40.103 (nohup+setsid; no tmux), ~11.6 it/s
+- **10:48** · Launched via `scripts/launch_phase2_multi.py` (runs on node A, paramiko+SFTP). Bootstrap took 2:50 per target (code sync 1:50 + ckpt 4.7s + soft-labels tar stream 41s + pip + smoke). Node C (103) lacked tmux → fell back to `nohup setsid bash launcher.sh`, with an initial duplicate-process mishap (killed one).
+- **10:45** · Switched Node B from 172.18.40.131 → **172.18.40.115** (131 had broken NVIDIA driver). Node C remapped to **172.18.40.103** (137 had GPU but no `adu` env). Both new targets have working `adu` conda env + CUDA.
+- **10:40** · Wrote `scripts/bootstrap_node.py` (paramiko-based, SFTP code+ckpt+zips, tar-stream soft labels). `launch_phase2_multi.py` chains bootstrap + tmux launch per node. `phase2_multi_status.py` polls all 3 concurrently. `RUNS.md` tracks assignments.
+- **10:35** · Phase-2 run `haze_s1` converged at **29.78 dB / 0.9675** over 200 epochs — ~6.8 dB below teacher (target was ≤ 2 dB). Diagnosed as loss-weighting + pixel-space "feature" adapter degeneracy + possible capacity. Three-way ablation designed: (A) same 4.35M w16 with λ_feat=0.05 + λ_perc=0.05, (B) scale to 17M w32 with same losses, (C) 17M w32 with pseudo-target + perceptual.
+- **10:30** · Added `--width` CLI to `phase2_distill/train.py` (16 → 4.35M, 32 → 17.11M).
+
 ## 2026-04-18 — Phase-2 kick-off
 
 - **19:10** · Phase-2 pipeline queued. Active chain on teaching@172.18.40.119: `its_dl` tmux downloads ITS (4.56G, ~35 MB/s, in progress) → unzips → hands off to `bash scripts/launch_phase2_tmux.sh 200 haze_s1` which opens tmux `phase2` and runs Stage 1 (soft labels on all 13,990 ITS via DeHamer GPU) then Stage 2 (NAFNet student training, 200 epochs, batch 8, patch 128, AdamW 1e-3 cosine, λ_feat 0.01). Overnight-capable; logs under `results/phase2_*.{log,txt}`.

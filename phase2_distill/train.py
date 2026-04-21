@@ -74,6 +74,8 @@ def main() -> None:
     ap.add_argument("--sots-gt", type=Path, default=ROOT / "data/RESIDE/SOTS-Test/valid_indoor/gt")
 
     ap.add_argument("--tag", default="haze_s1")
+    ap.add_argument("--width", type=int, default=16,
+                    help="NAFNet student width. 16 -> 4.35M, 32 -> 17.11M.")
     ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--patch", type=int, default=128)
@@ -115,9 +117,9 @@ def main() -> None:
     val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=2)
 
     # --- Model + adapter ---
-    student = build_student().to(device)
+    student = build_student(width=args.width).to(device)
     n, mM = count_params(student)
-    print(f"student params: {n:,} ({mM:.2f}M)")
+    print(f"student params: {n:,} ({mM:.2f}M)  width={args.width}")
 
     # We match student decoder feature (tap_channels) with the pseudo teacher target's shape.
     # The teacher tap channel count is effectively 3 (its dehazed output), so the adapter
