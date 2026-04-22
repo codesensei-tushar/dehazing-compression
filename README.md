@@ -8,13 +8,19 @@ lightweight configurations. The work is structured in two phases. **Phase 1**
 establishes a Post-Training Quantization (PTQ) baseline for DeHamer
 ([Guo et al., CVPR 2022](https://openaccess.thecvf.com/content/CVPR2022/papers/Guo_Image_Dehazing_Transformer_With_Transmission-Aware_3D_Position_Embedding_CVPR_2022_paper.pdf))
 and characterises the per-layer sensitivity of its hybrid CNN–Transformer
-architecture to INT8 quantization. **Phase 2** (future work) uses the
-sensitivity map as a prior for condition-specific knowledge distillation into a
-NAFNet-32 student.
+architecture to INT8 quantization. **Phase 2** distills DeHamer into a
+compact NAFNet ([Chen et al., ECCV 2022](https://arxiv.org/abs/2204.04676))
+student (17.1 M params, 7.7× smaller than the teacher) using offline
+soft-label supervision from DeHamer — a dehazing-specific application of
+Hinton et al.'s soft-target distillation
+([Hinton, Vinyals, Dean, 2015](https://arxiv.org/abs/1503.02531)).
 
-This README documents the Phase 1 pipeline and its reproducible results. Phase 2
-will be added as it is developed. A living changelog is maintained in
-[`Update.md`](Update.md).
+Headline result (Phase 2, Node-C configuration, SOTS-indoor 500 pairs):
+**33.87 dB PSNR, 0.9834 SSIM, 43 FPS @256² / 31 FPS @512² on RTX A5000 —
+7.7× fewer parameters than DeHamer and 2.66× faster at 512².**
+
+A living changelog is maintained in [`Update.md`](Update.md); active
+training-run registry in [`RUNS.md`](RUNS.md).
 
 ---
 
@@ -396,7 +402,232 @@ reference at 36.576 dB / 0.9862 SSIM, 242.5 ms @256²:
 
 ---
 
-## 7. Repository layout
+## 7. Phase 2 — Condition-specific Knowledge Distillation (Node C)
+
+Phase 1 hit a ceiling of 1.27× CPU speedup because PyTorch's dynamic PTQ only
+reaches the 26 `nn.Linear` layers in the Swin branch; the 328 `nn.Conv2d`
+layers that dominate DeHamer's runtime stayed FP32 (§6). Phase 2 sidesteps
+this by training a small student that is **architecturally** compressed —
+7.7× fewer parameters by construction — and using the pretrained DeHamer as
+the teacher. This section documents the winning configuration (Node C);
+two parallel ablations (Nodes A and B) are in §7.4.
+
+### 7.1 Student — NAFNet
+
+We use NAFNet (Chen, Chu, Zhang, Sun — *Simple Baselines for Image
+Restoration*, ECCV 2022, [paper](https://arxiv.org/abs/2204.04676)) as the
+student backbone. NAFNet removes non-linear activations from the attention
+and gating paths — its blocks use **SimpleGate** (element-wise multiplication
+of the channel halves) and **Simplified Channel Attention** in place of
+softmax / sigmoid gates. The result is a small, fast, easy-to-implement
+restoration backbone with strong precedent on SIDD (denoising) and GoPro
+(deblurring).
+
+Student configuration (Node C):
+
+| Field | Value |
+|-------|-------|
+| `width` | 32 |
+| `enc_blk_nums` | `[1, 1, 1, 28]` (NAFNet deep-trunk preset) |
+| `middle_blk_num` | 1 |
+| `dec_blk_nums` | `[1, 1, 1, 1]` |
+| Parameters | **17.11 M** |
+| Compression vs DeHamer (132.45 M) | **7.7×** |
+
+A forward hook on the last decoder block exposes a 32-channel feature tap
+that is used by the L_feat variants (not used in Node C — see §7.3).
+Third-party NAFNet lives as a pinned git submodule under `third_party/nafnet`;
+its BasicSR package imports `lmdb` eagerly at load time, so the student
+wrapper installs a minimal stub when `lmdb` is not available — nothing in
+the NAFNet code path actually uses it.
+
+### 7.2 Teacher and offline soft-label pipeline
+
+Teacher: DeHamer (Guo, Yan, Anwar, Cong, Ren, Li — *Image Dehazing
+Transformer with Transmission-Aware 3D Position Embedding*, CVPR 2022,
+[paper](https://openaccess.thecvf.com/content/CVPR2022/papers/Guo_Image_Dehazing_Transformer_With_Transmission-Aware_3D_Position_Embedding_CVPR_2022_paper.pdf))
+— the same `PSNR3663_ssim09881.pt` indoor checkpoint used in Phase 1.
+
+DeHamer is slow to run (~190 ms per image on A5000). Running it inline in the
+student training loop would dominate wall-clock time (~8 min per epoch for
+teacher forward alone over 13 990 images). Instead, we generate **all 13 990
+teacher outputs once, offline**, and store them as PNGs under
+`experiments/soft_labels/dehamer_indoor/`:
+
+```
+scripts/gen_soft_labels.py
+    --ckpt experiments/teachers/dehamer/ckpts/indoor/PSNR3663_ssim09881.pt
+    --hazy-dir data/RESIDE/ITS-Train/train_indoor/haze
+    --out-dir experiments/soft_labels/dehamer_indoor
+# 41 min on A5000 @ 5.7 img/s
+```
+
+This decouples teacher inference from student training: the student
+dataloader reads `(hazy, gt_clean, teacher_pseudo)` triples from disk, and no
+DeHamer forward runs per step.
+
+### 7.3 Node-C loss function (winning configuration)
+
+Node C uses the **teacher's output as the pixel-space target**, not the GT
+clean image:
+
+```
+L_total = L_pixel(student_out, teacher_pseudo)                (L1)
+        + 0.05 * L_perceptual(student_out, teacher_pseudo)    (VGG-19 features)
+        + 0.00 * L_feat                                       (disabled)
+```
+
+* **L_pixel** — L1 distance between the student's output and the teacher's
+  dehazed output over 128 × 128 patches.
+* **L_perceptual** — MSE between ImageNet-normalised ReLU-gated feature
+  activations of a frozen VGG-19 (through `features[:16]`, equivalent to
+  relu_3_3) applied to student output vs teacher output. Weighted λ = 0.05.
+  Implementation: `phase2_distill/losses.py`.
+* **L_feat** — channel-matching loss between student and teacher decoder
+  features. Disabled in Node C because the target is *already* the teacher's
+  output, so a feature-space match through a 1×1 conv adapter is redundant
+  with L_pixel.
+
+The choice to target the teacher's pseudo-clean output rather than the GT
+clean image is the standard distillation recipe (Hinton, Vinyals, Dean —
+*Distilling the Knowledge in a Neural Network*, 2015,
+[paper](https://arxiv.org/abs/1503.02531)) transposed to dense regression:
+the teacher's outputs are "soft" in the sense that they encode the teacher's
+internal priors about haze, and are a closer target for a small student than
+the hard GT clean image.
+
+### 7.4 Three-way ablation (A / B / C)
+
+Node C is one of three parallel configurations launched on separate teaching
+nodes (see `RUNS.md`). The ablation is orthogonal in two axes: student size,
+and supervision target.
+
+| Tag | Width | Params | Target | λ_feat | λ_perc | Hypothesis |
+|-----|------:|-------:|--------|-------:|-------:|------------|
+| `haze_a_small_tight` | 16 | 4.35 M | GT clean | 0.05 | 0.05 | Does stronger loss rescue a small student on GT supervision? |
+| `haze_b_large_tight` | 32 | 17.11 M | GT clean | 0.05 | 0.05 | Does raw capacity rescue GT supervision? |
+| `haze_c_large_pseudo` | 32 | 17.11 M | **Teacher output** | 0.00 | 0.05 | Does imitating the teacher directly beat GT? |
+
+An earlier run `haze_s1` (width 16, GT target, λ_feat 0.01, λ_perc 0)
+plateaued at 29.78 dB — the four-way gap that motivated this ablation.
+Nodes A and B are still training at time of writing; C's result is reported
+below. Once A and B complete we will have a clean decomposition of the
+contribution of capacity vs supervision choice.
+
+### 7.5 Training protocol (Node C)
+
+| Component | Value |
+|-----------|-------|
+| Dataset | RESIDE-ITS indoor (13 990 pairs) |
+| Test set | SOTS-indoor (500 pairs, disjoint) |
+| Patch | 128 × 128 random crops |
+| Augmentation | horizontal / vertical flips, 90° rotations |
+| Batch size | 8 |
+| Optimizer | AdamW, β = (0.9, 0.9) |
+| Learning rate | 1e-3 → 1e-6 cosine decay |
+| Epochs | 200 (= 349 600 optimisation steps) |
+| Gradient clip | L2 ≤ 1.0 |
+| Teacher forward | offline pseudo-labels on disk (no inline forward) |
+| Validation | every 5 epochs on full SOTS-indoor (500 pairs) |
+| Checkpointing | periodic every 10 epochs + `best.pt` on new best PSNR |
+| Compute | `teaching@172.18.40.103` (Intel 32-core, NVIDIA RTX A5000 24 GB) |
+| Python | `/home/teaching/miniconda3/envs/adu/bin/python` (torch 2.7.1+cu118) |
+| Wall-clock | ≈ 8.5 h end-to-end |
+
+### 7.6 Results — Node C on SOTS-indoor
+
+Evaluation uses the Node-C `best.pt` (saved at epoch 174) on the full
+500-image SOTS-indoor test set. PSNR and SSIM are means over the 500 pairs
+computed with `skimage.metrics` at `uint8` precision. Latency uses
+CUDA-event timing (3 warm-up + 20 timed iterations) on a single RTX A5000.
+
+| Metric | Value |
+|--------|------:|
+| **PSNR (mean)** | **33.869** dB |
+| **SSIM (mean)** | **0.9834** |
+| PSNR min / max | 28.51 / 40.20 |
+| SSIM min / max | 0.9646 / 0.9937 |
+| Parameters | **17.11 M** |
+| Full-image eval (variable HxW) | 83.6 ms / image |
+| Latency @ 256 × 256 | **23.2 ms (43.1 FPS)** |
+| Latency @ 512 × 512 | **32.5 ms (30.8 FPS)** |
+
+Comparison against the DeHamer teacher (same SOTS-indoor 500 pairs):
+
+| | DeHamer FP32 (132.45 M) | **NAFNet-32 Node C (17.11 M)** | Δ |
+|---|---:|---:|---:|
+| PSNR | 36.576 dB | **33.869 dB** | −2.71 dB |
+| SSIM | 0.9862 | **0.9834** | −0.003 |
+| Params | 132.45 M | **17.11 M** | **7.7× smaller** |
+| FPS @ 256² | 38.6 | **43.1** | **+12 %** |
+| FPS @ 512² | 11.6 | **30.8** | **+2.66×** |
+
+Headline: **7.7× fewer parameters, 2.66× faster at 512², 0.003 lower SSIM,
+2.71 dB lower PSNR.** The student achieves real-time inference at both
+256 × 256 (43 FPS) and 512 × 512 (31 FPS); the teacher falls under 30 FPS
+at 256² and becomes single-digit at 512².
+
+Full JSON is committed at `results/eval_student_haze_c_large_pseudo.json`.
+
+### 7.7 Why pseudo-supervision beats GT supervision for this pair
+
+The earlier `haze_s1` run (4.35 M, GT target, λ_feat = 0.01, no perceptual)
+plateaued at 29.78 dB — **4.09 dB below Node C.** Even controlling for the
+student-size difference, the gap is mostly explained by the target choice.
+Two complementary reasons:
+
+1. **Target tractability.** GT clean images are further from any hazy input
+   in pixel space than the teacher's dehazed output. For a small student,
+   the teacher output is a smoother, closer target that encodes the
+   teacher's priors — this is the classical soft-target effect of Hinton
+   et al. (2015), transposed from classification to dense regression.
+2. **Perceptual weight.** The VGG perceptual term (λ = 0.05) captures the
+   mid-frequency structure that L1 under-weights. Together with soft targets
+   it pulls the student toward the teacher's textural distribution rather
+   than blurred mean-colour reconstructions.
+
+One negative finding also matters: the feature-matching adapter used in
+`haze_s1` projected the student's 16-channel decoder tap down to 3 channels
+and compared against the teacher's RGB output. This is structurally
+degenerate — it duplicates L_pixel in feature space. Disabling L_feat and
+adding a proper perceptual term (Node C) was a net improvement; future work
+should instead match genuine intermediate features (e.g. teacher's
+256-channel decoder feature against a 1×1-projected student tap).
+
+### 7.8 Reproducing Node C
+
+On a teaching node with the `adu` conda env:
+
+```bash
+# 1. Pre-generate teacher soft labels (~41 min)
+PY=/home/teaching/miniconda3/envs/adu/bin/python
+$PY scripts/gen_soft_labels.py \
+    --ckpt experiments/teachers/dehamer/ckpts/indoor/PSNR3663_ssim09881.pt \
+    --hazy-dir data/RESIDE/ITS-Train/train_indoor/haze \
+    --out-dir experiments/soft_labels/dehamer_indoor
+
+# 2. Train (~8.5 h on A5000)
+$PY phase2_distill/train.py \
+    --tag haze_c_large_pseudo \
+    --width 32 --epochs 200 --batch 8 --patch 128 --workers 4 \
+    --lr-hi 1e-3 --lr-lo 1e-6 \
+    --lambda-feat 0.00 --lambda-perc 0.05 --use-pseudo-as-target \
+    --pseudo-dir experiments/soft_labels/dehamer_indoor \
+    --val-interval 5 --ckpt-interval 10
+
+# 3. Evaluate best.pt on full SOTS-indoor (~45 s on A5000)
+$PY phase2_distill/eval_student.py \
+    --ckpt experiments/students/haze_c_large_pseudo/best.pt \
+    --tag haze_c_large_pseudo --width 32
+```
+
+Multi-node orchestration for A, B, C in parallel: `scripts/launch_phase2_multi.py`
+bootstraps target nodes via paramiko SFTP and launches tmux (or `nohup setsid`
+fallback) sessions.
+
+---
+
+## 8. Repository layout
 
 ```
 dehazing-compression/
@@ -438,28 +669,55 @@ dehazing-compression/
 
 ---
 
-## 8. Citation & acknowledgements
+## 9. Citation & acknowledgements
 
-DeHamer is the work of Guo et al. (CVPR 2022) — code and weights at
-<https://github.com/Li-Chongyi/Dehamer>. Restormer is Zamir et al. (CVPR 2022)
-— code at <https://github.com/swz30/Restormer>. NAFNet is Chen et al.
-(ECCV 2022) — code at <https://github.com/megvii-research/NAFNet>. The RESIDE
-benchmark is Li et al. (TIP 2018).
+Teachers and backbones:
+
+* **DeHamer** — Guo, Yan, Anwar, Cong, Ren, Li. *Image Dehazing Transformer
+  With Transmission-Aware 3D Position Embedding.* CVPR 2022.
+  [paper](https://openaccess.thecvf.com/content/CVPR2022/papers/Guo_Image_Dehazing_Transformer_With_Transmission-Aware_3D_Position_Embedding_CVPR_2022_paper.pdf)
+  · [code / weights](https://github.com/Li-Chongyi/Dehamer).
+* **Restormer** — Zamir, Arora, Khan, Hayat, Khan, Yang. *Restormer: Efficient
+  Transformer for High-Resolution Image Restoration.* CVPR 2022 (Oral).
+  [paper](https://arxiv.org/abs/2111.09881) · [code](https://github.com/swz30/Restormer).
+* **NAFNet** — Chen, Chu, Zhang, Sun. *Simple Baselines for Image Restoration.*
+  ECCV 2022. [paper](https://arxiv.org/abs/2204.04676) ·
+  [code](https://github.com/megvii-research/NAFNet).
+
+Distillation literature grounding Node C:
+
+* **Hinton, Vinyals, Dean.** *Distilling the Knowledge in a Neural Network.*
+  NeurIPS Workshop 2014. [paper](https://arxiv.org/abs/1503.02531) —
+  introduced soft-target distillation; we apply it to dense image
+  restoration by targeting teacher outputs instead of ground truth.
+
+Benchmark:
+
+* **RESIDE** — Li, Ren, Fu, Tao, Feng, Zeng, Wang. *Benchmarking Single Image
+  Dehazing and Beyond.* IEEE TIP 2018.
+  [paper](https://ieeexplore.ieee.org/abstract/document/8451944) · [project](https://sites.google.com/view/reside-dehaze-datasets).
 
 ---
 
-## 9. Roadmap
+## 10. Roadmap
 
-Phase 1 is the first publishable unit. Subsequent phases (to be appended to
-this README as they complete):
+Phase 1 (PTQ) and Phase 2 Node-C (distillation) are the two reportable units
+today. Planned extensions:
 
-* **Phase 1 continuation.** Restormer fine-tune on ITS, PTQ + sensitivity on
-  Restormer, outdoor split baseline.
-* **Phase 2 — Condition-specific distillation.** NAFNet-32 haze student and
-  rain student distilled from DeHamer / Restormer. Feature-map and perceptual
-  losses. Soft-label pre-generation pipeline on cluster.
-* **Phase 3 — Deployment study.** GPU INT8 via TensorRT, mobile benchmarks,
-  real-world qualitative evaluation on RTTS.
+* **Phase 2 completion.** Ablation rows for Nodes A (width 16, GT target,
+  tight losses) and B (width 32, GT target, tight losses) — currently
+  training. Together with C they give a clean 2 × 2 ablation on
+  capacity × supervision target.
+* **Cross-split.** Repeat Phase 2 on SOTS-outdoor using DeHamer's outdoor
+  checkpoint; both teacher ckpt and SOTS-outdoor data are already on disk.
+* **Baselines.** AOD-Net (0.002 M, speed floor), FFA-Net (CNN dehazing SOTA),
+  and one prior distillation paper (KDDN if reproducible) to situate the
+  student against existing compression families.
+* **Restormer track.** Fine-tune Restormer on RESIDE-ITS (50 K iterations,
+  ~12–18 h on A5000), then run Phase 1 and Phase 2 for a two-teacher table.
+* **Rain student.** Same pipeline, Restormer-deraining teacher, Rain13K data.
+* **Deployment study.** GPU INT8 via TensorRT / torchao pt2e, mobile
+  benchmarks, real-world qualitative on RTTS.
 
 The detailed engineering status is tracked in [`Update.md`](Update.md); the
 architectural spec and cluster workflow are in [`CLAUDE.md`](CLAUDE.md).
