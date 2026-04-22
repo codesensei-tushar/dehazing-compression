@@ -20,7 +20,7 @@ Switch `./gpu` to another node: edit `.env` (`CLUSTER_HOST`) and re-source.
 |-----|-----------|---------|--------|-------:|-------:|---------|--------------------|
 | `haze_s1` *(completed)* | `teaching@172.18.40.119` | 4.35M (w16) | GT | 0.01 | 0.00 | `phase2` | 29.78 dB / 0.9675 @ ep194 |
 | `haze_a_small_tight` | `teaching@172.18.40.119` | 4.35M (w16) | GT | 0.05 | 0.05 | `phase2_haze_a_small_tight` | TBD |
-| `haze_b_large_tight` | `teaching@172.18.40.115` | 17.11M (w32) | GT | 0.05 | 0.05 | `phase2_haze_b_large_tight` | TBD |
+| `haze_b_large_tight` *(relaunched)* | `teaching@172.18.40.103` | 17.11M (w32) | GT | 0.05 | 0.05 | nohup (no tmux) | TBD |
 | `haze_c_large_pseudo` | `teaching@172.18.40.103` | 17.11M (w32) | Pseudo (teacher output) | 0.00 | 0.05 | `phase2_haze_c_large_pseudo` | TBD |
 
 Each training run persists:
@@ -59,4 +59,6 @@ The multi-launcher will (a) bootstrap nodes B & C via scp from node A (idempoten
 
 ## History
 
-- **2026-04-19 22:57 → 2026-04-20 07:27** — `haze_s1` full 200-epoch run on node A. Best 29.78 dB. Loss weighting + adapter were the bottleneck; this motivated the three-way split above.
+- **2026-04-19 22:57 → 2026-04-20 07:27** — `haze_s1` full 200-epoch run on node A (172.18.40.119). Best 29.78 dB. Loss weighting + adapter were the bottleneck; this motivated the three-way split above.
+- **2026-04-21 10:48 → 22:xx** — haze_a_small_tight on 119, haze_b_large_tight on 115, haze_c_large_pseudo on 103.
+- **2026-04-22** — `haze_c_large_pseudo` finished @ **33.87 / 0.9833** (paper winner so far). `haze_b_large_tight` on 115 crashed during checkpoint save — disk full (1.1 TB used of 1.2 TB, other users). Relaunched B on 103 (137 GB free). A is still at epoch 106/200 with best 31.48 dB so far.

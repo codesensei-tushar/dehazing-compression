@@ -1,0 +1,36 @@
+{
+  "model": "NAFNet-student",
+  "tag": "haze_c_large_pseudo",
+  "split": "indoor",
+  "ckpt": "experiments/students/haze_c_large_pseudo/best.pt",
+  "best_psnr_train_reported": 33.86922056195709,
+  "epoch_saved": 174,
+  "n_params": 17111907,
+  "params_M": 17.112,
+  "device": "cuda",
+  "width": 32,
+  "train_config": {
+    "width": 32,
+    "lambda_feat": 0.0,
+    "lambda_perc": 0.05,
+    "use_pseudo_as_target": true,
+    "epochs": 200,
+    "batch": 8,
+    "patch": 128
+  },
+  "eval": {
+    "psnr_mean": 33.86922056195709,
+    "ssim_mean": 0.9834424913256794,
+    "psnr_min": 28.508725480895446,
+    "psnr_max": 40.20035858425086,
+    "ssim_min": 0.9645984092955389,
+    "ssim_max": 0.993745831019215,
+    "n_images": 500,
+    "wall_time_s": 41.79624704795424,
+    "ms_per_img": 83.59249409590848
+  },
+  "latency_ms_256": 23.196396484375,
+  "latency_ms_512": 32.48988037109375,
+  "fps_256": 43.110144313734075,
+  "fps_512": 30.77881446709481
+}

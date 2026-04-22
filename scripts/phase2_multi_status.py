@@ -19,7 +19,7 @@ import paramiko
 
 NODES = {
     "A (small_tight)":  ("172.18.40.119", "teaching", "ds123", "haze_a_small_tight"),
-    "B (large_tight)":  ("172.18.40.115", "teaching", "ds123", "haze_b_large_tight"),
+    "B (large_tight)":  ("172.18.40.103", "teaching", "ds123", "haze_b_large_tight"),  # moved from 115 (disk full)
     "C (large_pseudo)": ("172.18.40.103", "teaching", "ds123", "haze_c_large_pseudo"),
 }
 
