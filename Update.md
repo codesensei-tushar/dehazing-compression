@@ -2,6 +2,13 @@
 
 One-liners; most recent at top. Times approximate (local).
 
+## 2026-04-26 — Phase-2 Node-B results + docs sync
+
+- **00:12** · Published full Node-B eval artefact `results/eval_student_haze_b_large_tight.json` (SOTS-indoor, 500 pairs): **34.398 dB / 0.9865**, 31.6 FPS @256², 28.9 FPS @512², best checkpoint saved at epoch 184.
+- **00:10** · Confirmed `haze_b_large_tight` completion on 172.18.40.103 (after earlier relocation from 115): final epoch-199 VAL 34.340 dB; best VAL 34.398 dB; logs under `results/phase2_haze_b_large_tight.log`.
+- **00:06** · Node A recovery: `haze_a_small_tight` resumed on 172.18.40.103 from epoch-104 `best.pt` after 172.18.40.119 failed (`/home` full, checkpoint writes failing).
+- **00:05** · Patched resume loading for torch >= 2.6 in `phase2_distill/train.py` (`torch.load(..., weights_only=False)`), and updated `scripts/phase2_multi_status.py` host mapping so A/B/C poll correctly on 172.18.40.103.
+
 ## 2026-04-21 — Phase-2 three-way parallel launch
 
 - **10:50** · All 3 training runs confirmed live (see `python scripts/phase2_multi_status.py`):

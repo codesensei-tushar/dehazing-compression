@@ -17,7 +17,7 @@ Hinton et al.'s soft-target distillation
 
 Headline result (Phase 2, Node-C configuration, SOTS-indoor 500 pairs):
 **33.87 dB PSNR, 0.9834 SSIM, 43 FPS @256² / 31 FPS @512² on RTX A5000 —
-7.7× fewer parameters than DeHamer and 2.66× faster at 512².**
+7.7× fewer parameters than DeHamer and 2.66× faster at 512².** 
 
 A living changelog is maintained in [`Update.md`](Update.md); active
 training-run registry in [`RUNS.md`](RUNS.md).
@@ -395,14 +395,14 @@ reference at 36.576 dB / 0.9862 SSIM, 242.5 ms @256²:
 * Restormer is a secondary teacher. A Phase 1 run on Restormer will be added
   after fine-tuning it on ITS (tracked in Week 4 of the schedule).
 
-* Phase 2 (condition-specific knowledge distillation into NAFNet-32) is
-  scheduled to begin once Phase 1 is frozen. The present sensitivity map and
-  negative-result on CNN block static are direct inputs to the Phase 2
-  student design.
+* Phase 2 (condition-specific knowledge distillation into NAFNet-32) is now
+  active: Nodes B and C are complete and Node A is resumed. The Phase-1
+  sensitivity map and the CNN block-static negative result remain direct
+  inputs to the student design.
 
 ---
 
-## 7. Phase 2 — Condition-specific Knowledge Distillation (Node C)
+## 7. Phase 2 — Condition-specific Knowledge Distillation (Nodes B and C)
 
 Phase 1 hit a ceiling of 1.27× CPU speedup because PyTorch's dynamic PTQ only
 reaches the 26 `nn.Linear` layers in the Swin branch; the 328 `nn.Conv2d`
@@ -510,9 +510,10 @@ and supervision target.
 
 An earlier run `haze_s1` (width 16, GT target, λ_feat 0.01, λ_perc 0)
 plateaued at 29.78 dB — the four-way gap that motivated this ablation.
-Nodes A and B are still training at time of writing; C's result is reported
-below. Once A and B complete we will have a clean decomposition of the
-contribution of capacity vs supervision choice.
+Node B and Node C are complete. Node A is currently resumed on 172.18.40.103
+from epoch 104 after a disk-full failure on 172.18.40.119. We already have
+the width-matched B-vs-C decomposition of supervision target; A will close the
+capacity axis for the full 2 × 2 readout.
 
 ### 7.5 Training protocol (Node C)
 
