@@ -139,7 +139,9 @@ def main() -> None:
     global_step = 0
     best_psnr = -1.0
     if args.resume and args.resume.exists():
-        ck = torch.load(args.resume, map_location=device)
+        # PyTorch >=2.6 defaults to weights_only=True, which breaks older
+        # checkpoints storing config objects like pathlib.Path.
+        ck = torch.load(args.resume, map_location=device, weights_only=False)
         student.load_state_dict(ck["student"])
         feat_adapter.load_state_dict(ck["adapter"])
         optim.load_state_dict(ck["optim"])
