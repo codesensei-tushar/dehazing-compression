@@ -14,6 +14,12 @@ Systematic compression of large dehazing transformers (DeHamer, Restormer) into 
 
 Framing for reviewers: condition-specific angle + autonomous driving / license plate recognition / surveillance motivation. Target venues respond to application framing.
 
+## Live project docs
+- `README.md` — paper-facing narrative, methods, and result tables.
+- `Update.md` — chronological engineering changelog.
+- `RUNS.md` — active/completed run registry across nodes.
+- `Checklist.md` — submission-readiness checklist (venue-wise status + blockers).
+
 ## Teacher models
 
 ### DeHamer (primary teacher for haze)

@@ -20,7 +20,8 @@ Headline result (Phase 2, Node-C configuration, SOTS-indoor 500 pairs):
 7.7× fewer parameters than DeHamer and 2.66× faster at 512².** 
 
 A living changelog is maintained in [`Update.md`](Update.md); active
-training-run registry in [`RUNS.md`](RUNS.md).
+training-run registry in [`RUNS.md`](RUNS.md); and submission-readiness
+tracking in [`Checklist.md`](Checklist.md).
 
 ---
 
@@ -720,5 +721,7 @@ today. Planned extensions:
 * **Deployment study.** GPU INT8 via TensorRT / torchao pt2e, mobile
   benchmarks, real-world qualitative on RTTS.
 
-The detailed engineering status is tracked in [`Update.md`](Update.md); the
-architectural spec and cluster workflow are in [`CLAUDE.md`](CLAUDE.md).
+The detailed engineering status is tracked in [`Update.md`](Update.md);
+submission readiness and minimum blockers are tracked in
+[`Checklist.md`](Checklist.md); the architectural spec and cluster workflow are
+in [`CLAUDE.md`](CLAUDE.md).
