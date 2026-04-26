@@ -240,6 +240,14 @@ def main() -> None:
         "best_psnr": best_psnr,
         "config": vars(args),
     }, indent=2, default=str))
+    # DONE marker so phase2_multi_status sees terminal state regardless of how
+    # the trainer was launched (multi-launcher, nohup, direct resume, ...).
+    status_path = ROOT / "results" / f"phase2_{args.tag}_status.txt"
+    if status_path.parent.exists():
+        from datetime import datetime, timezone
+        with status_path.open("a") as f:
+            f.write(f"DONE {datetime.now(timezone.utc).astimezone().isoformat(timespec='seconds')} "
+                    f"best_psnr={best_psnr:.3f}\n")
 
 
 if __name__ == "__main__":

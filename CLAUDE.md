@@ -3,9 +3,22 @@
 Quantization + Condition-Specific Distillation for Real-Time Inference.
 
 ## Target venues
+
+Three tracks; pick by appetite and timeline. Detailed tier table + per-venue
+fit assessment lives in `Checklist.md` §3.
+
+### Journal track (original target list)
 - Signal Processing: Image Communication (IEEEtran, 8 pages, double-column)
 - The Visual Computer (Springer journal style, 6–8 pages)
 - Optik
+
+### Conference track
+- **Tier-2 (sweet spot for current shape):** WACV / BMVC / ACCV — values practical ML + systems insight; matches the engineering contribution.
+- **Tier-1 (reachable with extensions):** CVPR / ICCV / ECCV — needs Restormer-teacher track, SOTS-outdoor split, deployment study, sharper novelty framing.
+- **Workshops (fast-feedback fallback):** CVPR-W / ECCV-W — strong fit for the PTQ + distillation engineering story without the deeper SOTA-comparison expansion.
+
+### Preprint
+- **arXiv** — recommended regardless of which of the above is chosen; do *not* arXiv until the same-GPU teacher latency is in place (v1 is permanent record).
 
 ## Contribution claim
 Systematic compression of large dehazing transformers (DeHamer, Restormer) into condition-specific lightweight students (haze student, rain student), achieving near-teacher PSNR/SSIM at 5–10× fewer parameters and demonstrable real-time FPS on standard GPU hardware. Two sequential strategies:

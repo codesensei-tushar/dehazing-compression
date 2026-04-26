@@ -2,6 +2,20 @@
 
 One-liners; most recent at top. Times approximate (local).
 
+## 2026-04-26 — Isolated-load latency re-measurement (B = C ≠ what we claimed)
+
+- **11:00** · Latency story revised in README §7.4 + §7.6 + headline. Old single-window measurement claimed Node C at 43.1 FPS @256² (the "throughput winner"). New 5×100-iter isolated-load mean ± std on the same RTX A5000: **A 29.70 ± 0.05 ms (33.7 FPS) · B 32.89 ± 2.23 ms (30.4 FPS) · C 36.40 ± 0.64 ms (27.5 FPS) at 256²**. B and C are essentially throughput-equivalent (same architecture, within one std at 512²); A is now the throughput winner. Old `eval_student_*.json` 256² values for B and C disagreed by ≈ 37 % across two different days — that was inter-window/contention variance, not a real model difference. Per-shape `samples_ms` arrays in `results/latency_isolated_*.json` show ≈ 20 % spread within a single isolated session, confirming the architecture is overhead/memory-bound on this small input → mean ± std is the right reporting form.
+- **10:55** · Wrote `phase2_distill/bench_latency.py` (5×100-iter CUDA-event reps for 256² + 512², writes `results/latency_isolated_<tag>.json`). Synced to 172.18.40.103, ran sequentially for A/B/C with GPU baseline 0 % util.
+- **10:50** · `.env` was still pointing at the dead 172.18.40.119; sync_to_cluster.sh silently shipped to a stale host. Worked around with one-shot rsync direct to 103. TODO: update `.env` (or rotate to a node-resolution env-var convention) so the default path can never lie about which host has the latest code.
+- **10:45** · Speedup-vs-teacher claim in README §7.6 ("2.66× faster at 512²") removed: teacher latency was measured on A6000 (cs671), student on A5000 (teaching). Cross-GPU comparison was invalid. Same-GPU teacher re-measurement is now an explicit Checklist blocking item.
+
+## 2026-04-26 — Node A complete + SOP tightening
+
+- **10:30** · Status-marker SOP fix landed in `phase2_distill/train.py`: trainer now appends `DONE <iso> best_psnr=…` to `results/phase2_<tag>_status.txt` after writing `training_summary.json`. Closes the gap exposed by Node A: launcher-less resume runs were leaving status.txt stuck on STARTED/RESTARTED, so `phase2_multi_status` could not distinguish "still training" from "finished hours ago." Backfilled DONE lines for A/B/C on 172.18.40.103.
+- **10:25** · Node A run **complete**. `results/eval_student_haze_a_small_tight.json` written: **32.391 dB / 0.9829 SSIM** on SOTS-indoor 500, 33.0 FPS @256², 27.2 FPS @512², best ckpt @ ep184, 4.35M params (width 16). Pulled training_summary.json + eval JSON locally; `best.pt` left on cluster (53 MB, gitignored).
+- **10:20** · Live poll of 172.18.40.103 showed all three Phase-2 tmux/nohup runs had silently completed: A finished at 06:32, B at 23:55 (yesterday), C at 12:46 (Apr 22). Eval already existed for B and C; ran eval for A on the cluster GPU — wall 63.6s, 127 ms/img on full-image SOTS pairs.
+- **10:15** · 2x2 ablation now fully populated. Capacity x supervision-target table for distillation: small+GT 32.39 / large+GT 34.40 / large+pseudo 33.87 (and prior small+GT, weak losses, `haze_s1` 29.78). Capacity is the dominant lever (+2.0 dB w16→w32 under same losses); supervision target (GT vs teacher-pseudo at w32) is a 0.5 dB quality vs throughput trade.
+
 ## 2026-04-26 — Phase-2 Node-B results + docs sync
 
 - **00:27** · Added submission-readiness tracker `Checklist.md` (venue-wise readiness, blocking items, and minimum work plan before submission).

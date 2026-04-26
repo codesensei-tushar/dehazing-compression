@@ -1,0 +1,37 @@
+{
+  "tag": "haze_a_small_tight",
+  "width": 16,
+  "params_M": 4.348,
+  "gpu": "NVIDIA RTX A5000",
+  "reps": 5,
+  "per_rep_iters": 100,
+  "per_rep_warmup": 10,
+  "shape_256": {
+    "samples_ms": [
+      29.6504,
+      29.6558,
+      29.6958,
+      29.7853,
+      29.7095
+    ],
+    "mean_ms": 29.6994,
+    "std_ms": 0.0486,
+    "min_ms": 29.6504,
+    "max_ms": 29.7853,
+    "fps_mean": 33.671
+  },
+  "shape_512": {
+    "samples_ms": [
+      29.0775,
+      29.2019,
+      33.8033,
+      36.6089,
+      36.7339
+    ],
+    "mean_ms": 33.0851,
+    "std_ms": 3.3878,
+    "min_ms": 29.0775,
+    "max_ms": 36.7339,
+    "fps_mean": 30.225
+  }
+}

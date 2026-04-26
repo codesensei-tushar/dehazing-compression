@@ -15,9 +15,12 @@ soft-label supervision from DeHamer — a dehazing-specific application of
 Hinton et al.'s soft-target distillation
 ([Hinton, Vinyals, Dean, 2015](https://arxiv.org/abs/1503.02531)).
 
-Headline result (Phase 2, Node-C configuration, SOTS-indoor 500 pairs):
-**33.87 dB PSNR, 0.9834 SSIM, 43 FPS @256² / 31 FPS @512² on RTX A5000 —
-7.7× fewer parameters than DeHamer and 2.66× faster at 512².** 
+Headline result (Phase 2, SOTS-indoor 500 pairs, RTX A5000):
+**Node B 34.40 dB / 0.9865 (quality winner, 17.1 M params) and Node A
+32.39 dB / 0.9829 (throughput winner, 4.35 M params at ≈ 33.7 FPS @256²).**
+Both are within the 2.2 dB PSNR / 0.003 SSIM gap of the 132.45 M-parameter
+DeHamer teacher. A same-GPU teacher re-measurement is required before
+quoting a speedup multiplier vs DeHamer (see §7.4).
 
 A living changelog is maintained in [`Update.md`](Update.md); active
 training-run registry in [`RUNS.md`](RUNS.md); and submission-readiness
@@ -396,10 +399,10 @@ reference at 36.576 dB / 0.9862 SSIM, 242.5 ms @256²:
 * Restormer is a secondary teacher. A Phase 1 run on Restormer will be added
   after fine-tuning it on ITS (tracked in Week 4 of the schedule).
 
-* Phase 2 (condition-specific knowledge distillation into NAFNet-32) is now
-  active: Nodes B and C are complete and Node A is resumed. The Phase-1
-  sensitivity map and the CNN block-static negative result remain direct
-  inputs to the student design.
+* Phase 2 (condition-specific knowledge distillation into NAFNet) is
+  complete across all three configurations (Nodes A / B / C); see §7.4. The
+  Phase-1 sensitivity map and the CNN block-static negative result remain
+  direct inputs to the student design.
 
 ---
 
@@ -510,11 +513,32 @@ and supervision target.
 | `haze_c_large_pseudo` | 32 | 17.11 M | **Teacher output** | 0.00 | 0.05 | Does imitating the teacher directly beat GT? |
 
 An earlier run `haze_s1` (width 16, GT target, λ_feat 0.01, λ_perc 0)
-plateaued at 29.78 dB — the four-way gap that motivated this ablation.
-Node B and Node C are complete. Node A is currently resumed on 172.18.40.103
-from epoch 104 after a disk-full failure on 172.18.40.119. We already have
-the width-matched B-vs-C decomposition of supervision target; A will close the
-capacity axis for the full 2 × 2 readout.
+plateaued at 29.78 dB — the four-way gap that motivated this ablation. All
+three runs are now complete (final results in `results/eval_student_*.json`):
+
+| Tag | Width | Params | Target | PSNR / SSIM (SOTS-indoor 500) | Latency @256² (ms) | Latency @512² (ms) |
+|-----|------:|-------:|--------|------------------------------:|-------------------:|-------------------:|
+| `haze_a_small_tight`  | 16 |  4.35 M | GT clean       | 32.39 / 0.9829         | **29.70 ± 0.05** | 33.09 ± 3.39 |
+| `haze_b_large_tight`  | 32 | 17.11 M | GT clean       | **34.40** / **0.9865** | 32.89 ± 2.23     | 34.13 ± 1.80 |
+| `haze_c_large_pseudo` | 32 | 17.11 M | Teacher output | 33.87 / 0.9834         | 36.40 ± 0.64     | 33.84 ± 1.16 |
+
+Latency: mean ± std over 5 independent 100-iteration CUDA-event windows
+(10-iter warmup each), single RTX A5000, GPU 0 % baseline utilisation, no
+concurrent training. The earlier single-window evals in
+`results/eval_student_*.json` are kept for traceability but are dominated by
+inter-window variance on this small architecture (the 100-iter mean of B and
+C disagreed by ≈ 37 % at 256² across two evals run on different days; the
+isolated repeated-rep numbers above resolve to ≈ 11 % at 256² and within std
+elsewhere). See `results/latency_isolated_*.json`.
+
+Reading: capacity is the dominant lever for quality (w16 → w32 at fixed
+losses adds ≈ 2.0 dB PSNR). On this NAFNet-`[1,1,1,28]` configuration on
+A5000, latency is overhead/memory-bound at both 256² and 512²: the small
+student (A) is the throughput winner (≈ 33.7 FPS @256²), while the two w32
+configurations B and C are essentially throughput-equivalent (same
+architecture; the per-shape difference is within one std). Node B is the
+quality winner; Node C still trades 0.5 dB PSNR for the cleaner pseudo-target
+loss (no L_feat adapter) but no longer claims a throughput advantage.
 
 ### 7.5 Training protocol (Node C)
 
@@ -551,8 +575,15 @@ CUDA-event timing (3 warm-up + 20 timed iterations) on a single RTX A5000.
 | SSIM min / max | 0.9646 / 0.9937 |
 | Parameters | **17.11 M** |
 | Full-image eval (variable HxW) | 83.6 ms / image |
-| Latency @ 256 × 256 | **23.2 ms (43.1 FPS)** |
-| Latency @ 512 × 512 | **32.5 ms (30.8 FPS)** |
+| Latency @ 256 × 256 | 36.40 ± 0.64 ms (27.5 FPS) |
+| Latency @ 512 × 512 | 33.84 ± 1.16 ms (29.6 FPS) |
+
+Latency is mean ± std over 5 isolated-load 100-iter CUDA-event windows on
+RTX A5000 (`results/latency_isolated_haze_c_large_pseudo.json`); the earlier
+single-window value of 23.2 ms at 256² in
+`results/eval_student_haze_c_large_pseudo.json` was within the inter-window
+spread now exposed by the repeated-measurement protocol (§7.4) and is no
+longer the headline number.
 
 Comparison against the DeHamer teacher (same SOTS-indoor 500 pairs):
 
@@ -561,13 +592,16 @@ Comparison against the DeHamer teacher (same SOTS-indoor 500 pairs):
 | PSNR | 36.576 dB | **33.869 dB** | −2.71 dB |
 | SSIM | 0.9862 | **0.9834** | −0.003 |
 | Params | 132.45 M | **17.11 M** | **7.7× smaller** |
-| FPS @ 256² | 38.6 | **43.1** | **+12 %** |
-| FPS @ 512² | 11.6 | **30.8** | **+2.66×** |
 
-Headline: **7.7× fewer parameters, 2.66× faster at 512², 0.003 lower SSIM,
-2.71 dB lower PSNR.** The student achieves real-time inference at both
-256 × 256 (43 FPS) and 512 × 512 (31 FPS); the teacher falls under 30 FPS
-at 256² and becomes single-digit at 512².
+Throughput comparison vs the teacher is intentionally omitted from this row:
+the teacher's Phase-1 latency (25.9 ms @256² / 86.4 ms @512²) was measured
+on a different GPU (A6000 on cs671 cluster) than the Phase-2 student latency
+above (A5000 on teaching cluster). A same-GPU re-measurement of the teacher
+is on the submission checklist before any speedup multiplier is quoted in
+the paper.
+
+Quality headline (the part that *is* hardware-independent):
+**7.7× fewer parameters, 0.003 lower SSIM, 2.71 dB lower PSNR.**
 
 Full JSON is committed at `results/eval_student_haze_c_large_pseudo.json`.
 
@@ -629,7 +663,114 @@ fallback) sessions.
 
 ---
 
-## 8. Repository layout
+## 8. Publishability assessment
+
+Direct answer: **the results are publishable** at Optik or The Visual
+Computer, the two more accessible of the three target venues
+([§ Roadmap](#11-roadmap) lists all three). The numerical achievements clear
+the bar. Whether the *current artifact* in this repository is submittable is
+a separate question, and it is not — there is no manuscript file, several
+experimental gaps remain, and one cross-GPU comparison was invalid until it
+was removed earlier today.
+
+### 8.1 Why the results clear the bar
+
+**Phase 1.** 36.551 dB at 0.025 dB drop with 1.27× CPU speedup is a clean
+PTQ-sensitivity contribution on a hybrid CNN–Transformer architecture. The
+documented negative result on block-wise static PTQ of CNN blocks is a
+genuine, reportable finding — most PTQ papers omit failed configurations,
+and a documented failure mode at this depth is the kind of evidence that
+helps reviewers calibrate.
+
+**Phase 2 Node B.** 34.40 dB / 0.9865 SSIM with **2.18 dB** gap to a
+132.5 M-parameter teacher at **7.7× compression** is competitive with
+published distillation-on-dehazing work. KDDN, the closest comparable
+distillation paper, reports ≈ 34.7 dB on SOTS-indoor; Node B is within
+0.3 dB at substantially fewer parameters. Node B's SSIM is statistically
+indistinguishable from the teacher (within 0.0003).
+
+**Phase 2 Node A.** 32.39 dB / 0.9829 SSIM at **4.35 M parameters
+(30.5× compression)** is a defensible extreme-compression operating point.
+AOD-Net at ≈ 1.7 K parameters (~2500× smaller than Node A) is the
+lightweight-dehazing speed floor and sits around 19–22 dB on SOTS-indoor;
+Node A spends ~3 orders of magnitude more parameters to buy ≈ 10 dB. Both
+sit on distinct, complementary points of a quality-vs-parameters Pareto
+frontier rather than dominating each other — which is exactly the
+positioning the paper's "compression spectrum" framing needs.
+
+**The 2 × 2 ablation.** Capacity × supervision-target with all four cells
+measured (the failed `haze_s1` 29.78 dB run at width 16, weak losses, GT
+target serves as the historical anchor) is methods-section content that
+reviewers will accept as substantive evidence of *why* the configuration
+choices matter, rather than as a single-shot result.
+
+### 8.2 Where the bar is not yet cleared
+
+What is *not* publishable is the act of submitting today, because:
+
+* **The manuscript file does not exist.** No `.tex`, no `.pdf`, no `paper/`
+  directory. This README reads like a paper draft but cannot be uploaded
+  to any of the target venues' submission systems as-is. Each venue
+  expects a formatted manuscript with abstract, introduction, related
+  work, method, experiments, discussion, and references.
+* **AOD-Net and FFA-Net comparison rows are empty.** Reviewers at every
+  target venue will demand at minimum these two as external lightweight /
+  CNN-dehazing baselines. Neither is yet implemented or evaluated in this
+  repository, so the comparison table currently has only DeHamer as a
+  ceiling reference.
+* **No real-world evaluation.** RTTS qualitative panel and FADE
+  no-reference scores are absent. Synthetic-only evaluation (SOTS-indoor)
+  is routinely flagged in dehazing reviews as insufficient for the
+  application motivation (autonomous driving, surveillance, license-plate
+  recognition) that frames the contribution.
+* **Same-GPU teacher latency is missing.** The Phase-1 teacher latency
+  numbers were measured on an A6000 in the cs671 cluster; all Phase-2
+  student latency numbers are on an A5000 in the teaching cluster
+  (172.18.40.103). The cross-GPU comparison was removed from § 7.6 as
+  invalid earlier today. Without a same-GPU teacher re-measurement —
+  about 30 seconds of compute — no PSNR-preserving-speedup multiplier vs
+  DeHamer can be quoted in the paper.
+* **No figures rendered.** No qualitative side-by-side panel, no
+  sensitivity heatmap, no quality-vs-speed-vs-parameters Pareto plot. All
+  three are standard expectations for the target venues and none exist in
+  this repository.
+
+### 8.3 Where the work fits — venue landscape
+
+The original CLAUDE.md target list (Optik, The Visual Computer, Signal
+Processing: Image Communication) is the **journal track**. There is also a
+**conference track** and an **arXiv preprint track**, and the right answer
+depends on how much additional polish lands before submission. Honest read
+of where the contributions sit *today* across the three tracks:
+
+| Tier / Venue | Type | Fit *now* | What it would take |
+|---|---|---|---|
+| **CVPR / ICCV / ECCV** | Tier-1 conference | Borderline | Restormer-teacher track, SOTS-outdoor split, ≥ 2 external baselines + ≥ 1 prior distillation paper, GPU INT8 deployment numbers, sharper "condition-specific distillation" novelty framing. ~3–4 weeks of focused work on top of writing. |
+| **WACV / BMVC / ACCV** | Tier-2 conference | **Sweet spot** | Same baseline + writing work; the Restormer-teacher track and outdoor split are nice-to-have rather than blocking. These venues explicitly value practical ML + systems insight, which is what the engineering contribution looks like. |
+| **CVPR-W / ECCV-W** | Workshop | High | Fast feedback path. Strong fit for the PTQ + distillation engineering story without needing the deeper SOTA-comparison expansion the main conferences would demand. |
+| **arXiv** | Preprint | High | Recommended *regardless* of which conference / journal is chosen. Clean the manuscript, render figures, upload — establishes timestamp / priority and gives external readers something to point at. Cheap and high-value. |
+| **Optik** | Journal | Medium-High | Application-framed venue; fits the autonomous-driving / surveillance motivation. Doable after the blocking items in Checklist § 4 close. |
+| **The Visual Computer** (Springer) | Journal | Medium-High | Similar fit to Optik; expects complete ablations + a stronger qualitative section, both of which are on the work plan. |
+| **Signal Processing: Image Communication** (IEEEtran) | Journal | Medium | More demanding on comparative depth and novelty framing; would benefit from including the Restormer track and the deployment study. |
+
+Working interpretation, not a decision: the **arXiv preprint** is the
+fastest move that pays off in every downstream path; **WACV / BMVC** is the
+highest-probability acceptance route for the work in close-to-its-current
+shape; **Optik / The Visual Computer** are realistic journal targets after
+the same blocking items close; **CVPR / ICCV / ECCV** is reachable but only
+with the Restormer track, an outdoor split, and stronger novelty framing.
+
+### 8.4 One-line verdict
+
+The science is publishable. The submission is not. The full list of work
+required to convert one into the other lives in
+[`Checklist.md`](Checklist.md) § 4 and § 5 and is roughly two weeks of
+focused engineering + writing for a Tier-2 conference / journal target,
+3-4 weeks for a Tier-1 conference target.
+
+---
+
+## 9. Repository layout
 
 ```
 dehazing-compression/
@@ -671,7 +812,7 @@ dehazing-compression/
 
 ---
 
-## 9. Citation & acknowledgements
+## 10. Citation & acknowledgements
 
 Teachers and backbones:
 
@@ -701,27 +842,72 @@ Benchmark:
 
 ---
 
-## 10. Roadmap
+## 11. Roadmap
 
-Phase 1 (PTQ) and Phase 2 Node-C (distillation) are the two reportable units
-today. Planned extensions:
+Phase 1 (PTQ) and Phase 2 (Nodes A / B / C, distillation) are the reportable
+units today. The roadmap below splits **science extensions** (which strengthen
+the result) from a **publication path** (which converts the result into a
+submitted manuscript).
 
-* **Phase 2 completion.** Ablation rows for Nodes A (width 16, GT target,
-  tight losses) and B (width 32, GT target, tight losses) — currently
-  training. Together with C they give a clean 2 × 2 ablation on
-  capacity × supervision target.
+### 11.1 Science extensions
+
 * **Cross-split.** Repeat Phase 2 on SOTS-outdoor using DeHamer's outdoor
   checkpoint; both teacher ckpt and SOTS-outdoor data are already on disk.
-* **Baselines.** AOD-Net (0.002 M, speed floor), FFA-Net (CNN dehazing SOTA),
-  and one prior distillation paper (KDDN if reproducible) to situate the
-  student against existing compression families.
+  Promotes the contribution from "haze-indoor compression" to "haze
+  compression" and is needed for any Tier-1 conference target.
+* **Baselines.** AOD-Net (≈ 1.7 K parameters, speed floor), FFA-Net (CNN
+  dehazing reference), and one prior distillation paper (KDDN if
+  reproducible) to situate the student against existing compression
+  families. Without these, the comparison table reads as one-sided.
 * **Restormer track.** Fine-tune Restormer on RESIDE-ITS (50 K iterations,
-  ~12–18 h on A5000), then run Phase 1 and Phase 2 for a two-teacher table.
-* **Rain student.** Same pipeline, Restormer-deraining teacher, Rain13K data.
-* **Deployment study.** GPU INT8 via TensorRT / torchao pt2e, mobile
-  benchmarks, real-world qualitative on RTTS.
+  ~12–18 h on A5000), then run Phase 1 (PTQ) and Phase 2 (distillation) for
+  a two-teacher table. Promotes the contribution from "compress one
+  transformer" to "compress two transformers under one recipe."
+* **Rain student.** Same pipeline, Restormer-deraining teacher, Rain13K
+  data. Activates the **condition-specific** framing (haze ≠ rain) that the
+  paper's novelty argument leans on.
+* **Deployment study.** GPU INT8 via TensorRT / `torchao` pt2e, FP16
+  comparison, mobile benchmarks, real-world qualitative on RTTS, FADE
+  no-reference scores. Closes the practical-deployment loop the
+  application motivation (autonomous driving, surveillance, license-plate
+  recognition) implies.
+* **Stability evidence.** Repeat-eval bands on PSNR/SSIM, latency mean ±
+  std for the teacher on the same GPU as the students (this last item is
+  also a blocking item — see `Checklist.md` § 4).
+
+### 11.2 Publication path
+
+Concrete sequencing — the cheapest moves first; later steps are conditional
+on appetite and remaining time.
+
+1. **Close the same-GPU teacher-latency blocker.** ~30 seconds of compute
+   on `172.18.40.103` once the teacher is loaded. Unlocks the
+   speedup-vs-DeHamer multiplier, which is the strongest single number in
+   the paper.
+2. **Add AOD-Net + FFA-Net rows to the comparison table.** Either by
+   running them on SOTS-indoor here or by quoting published numbers with
+   citations. Without this, every venue reviewer asks for it.
+3. **Add an RTTS qualitative panel + FADE scores.** Synthetic-only
+   evaluation is the single most common rejection reason for dehazing
+   papers, regardless of venue.
+4. **Write the manuscript.** Convert this README into a venue-appropriate
+   LaTeX file with abstract, intro, related work, method, experiments,
+   discussion, references. The chosen venue dictates page limit and style:
+   IEEEtran for SPIC, Springer LNCS for The Visual Computer, plain Optik
+   template, or the conference's official style for Tier-2 / Tier-1.
+5. **Render figures.** Quality-vs-parameters Pareto plot, sensitivity
+   heatmap, qualitative side-by-side panel, ablation bar chart.
+6. **Upload to arXiv.** Establishes timestamp and gives external readers
+   something to point at while the chosen venue runs review.
+7. **Submit.** Tier-2 conference (WACV / BMVC / ACCV) is the highest
+   probability accept for the work in close-to-current shape; journal
+   (Optik / The Visual Computer) is the parallel option with slower review
+   but no page-limit pressure.
+8. **(Optional, conditional on time and appetite.)** Add the Restormer
+   track + SOTS-outdoor split + GPU INT8 deployment numbers, then upgrade
+   to a Tier-1 conference (CVPR / ICCV / ECCV) submission.
 
 The detailed engineering status is tracked in [`Update.md`](Update.md);
-submission readiness and minimum blockers are tracked in
+submission readiness, venue-fit table, and minimum blockers are tracked in
 [`Checklist.md`](Checklist.md); the architectural spec and cluster workflow are
 in [`CLAUDE.md`](CLAUDE.md).
