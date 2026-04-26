@@ -665,9 +665,15 @@ fallback) sessions.
 
 ## 8. Publishability assessment
 
-Direct answer: **the results are publishable** at Optik or The Visual
-Computer, the two more accessible of the three target venues
-([§ Roadmap](#11-roadmap) lists all three). The numerical achievements clear
+Direct answer: **the results are publishable**. The first-line targets are
+**Tier-2 conferences (WACV / BMVC / ACCV)** and **workshops (CVPR-W /
+ECCV-W)** — the venues that match the work's current shape (strong
+empirical / engineering contribution, complete 2 × 2 ablation, practical
+deployment relevance). **Tier-1 conferences (CVPR / ICCV / ECCV)** are
+reachable as a follow-up after the Restormer-teacher track, SOTS-outdoor
+split, and GPU INT8 deployment study land. The full venue-fit table is in
+[`Checklist.md`](Checklist.md) § 3 and the per-tier blocking-item buckets
+are in [`Checklist.md`](Checklist.md) § 4. The numerical achievements clear
 the bar. Whether the *current artifact* in this repository is submittable is
 a separate question, and it is not — there is no manuscript file, several
 experimental gaps remain, and one cross-GPU comparison was invalid until it
