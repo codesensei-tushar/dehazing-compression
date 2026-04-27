@@ -67,6 +67,11 @@ cover/
 
 # Django stuff:
 *.log
+# but keep small training-evidence logs we explicitly want versioned
+!results/phase1_runall.log
+!results/phase1_block_static.log
+!results/bootstrap_downloads.log
+!results/phase2_*.clean.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
