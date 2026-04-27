@@ -778,43 +778,129 @@ focused engineering + writing for a Tier-2 conference / journal target,
 
 ## 9. Repository layout
 
+The tree below reflects what is actually in the repo *and where the large
+binaries live*. Anything tagged **gitignored** is not in version control and,
+for model weights specifically, is mirrored to the project's Google Drive
+folder for distribution (see § 9.1).
+
 ```
 dehazing-compression/
-├── CLAUDE.md                  # engineering notes, always loaded by Claude Code
-├── Update.md                  # time-stamped changelog
-├── configs/                   # YAML configs (placeholders for Phase 2)
-├── data/                      # LOCAL dummy only; real RESIDE lives on cluster
+├── README.md                          # this file (paper-facing narrative)
+├── CLAUDE.md                          # engineering / operational notes for Claude Code
+├── Update.md                          # time-stamped changelog
+├── RUNS.md                            # Phase-2 training-run registry + status SOP
+├── Checklist.md                       # submission readiness, venue-fit table, blockers
+│
+├── configs/                           # YAML configs (Phase-2 placeholders)
+├── data/
+│   ├── reside.py                      # ITS / SOTS dataset loaders (used on cluster)
+│   ├── rain13k.py                     # placeholder
+│   └── dummy/                         # tiny local hazy/clean pairs for shape tests
+│                                      # (real RESIDE only lives on cluster)
+│
 ├── models/
 │   ├── teachers/
-│   │   ├── dehamer.py         # thin wrapper + preprocessing + forward hooks
-│   │   └── dehamer_fx_patch.py  # FX-traceable DarkChannel patch
-│   ├── students/              # Phase 2
-│   └── quantized/             # Phase 2
-├── phase1_quantize/
-│   ├── run_ptq.py             # dynamic PTQ, single-variant CLI
-│   ├── run_all_ptq.py         # fp32 / dyn_all / dyn_mixed runner + CSV/JSON
-│   ├── static_ptq.py          # FX-mode attempt (kept for reference)
-│   ├── block_static_ptq.py    # eager-mode block static PTQ (§4.4)
-│   └── sensitivity.py         # per-Linear sensitivity scan
-├── phase2_distill/            # Phase 2 (placeholders)
+│   │   ├── dehamer.py                 # UNet_emb wrapper + preprocessing + decoder taps
+│   │   └── dehamer_fx_patch.py        # FX-traceable DarkChannel patch (kept for reference)
+│   └── students/
+│       └── nafnet_student.py          # NAFNet wrapper, build_student(width=...)
+│
+├── phase1_quantize/                   # Phase-1: PTQ on DeHamer
+│   ├── run_ptq.py                     # dynamic PTQ, single-variant CLI
+│   ├── run_all_ptq.py                 # fp32 / dyn_all / dyn_mixed runner + CSV/JSON
+│   ├── static_ptq.py                  # FX-mode attempt (kept for reference)
+│   ├── block_static_ptq.py            # eager-mode block static PTQ (§ 4.4)
+│   └── sensitivity.py                 # per-Linear sensitivity scan
+│
+├── phase2_distill/                    # Phase-2: condition-specific distillation
+│   ├── train.py                       # student training loop (writes DONE marker on finish)
+│   ├── losses.py                      # L_pixel + λ_feat·L_feat + λ_perc·L_perceptual
+│   ├── eval_student.py                # full SOTS-indoor eval + CUDA-event latency → JSON
+│   └── bench_latency.py               # repeated-rep isolated-load latency, mean ± std
+│
 ├── evaluate/
-│   ├── metrics.py             # PSNR, SSIM, CUDA-event latency
-│   └── benchmark_dehamer.py   # FP32 baseline on SOTS + latency @ 256, 512
+│   ├── metrics.py                     # PSNR, SSIM, CUDA-event latency
+│   └── benchmark_dehamer.py           # FP32 teacher baseline on SOTS + latency @ 256² / 512²
+│
 ├── scripts/
-│   ├── sync_to_cluster.sh
-│   ├── make_dummy_data.py
-│   ├── download_reside.sh
-│   ├── download_dehamer_ckpts.sh
-│   ├── smoke_dehamer_local.py
-│   └── verify_dehamer_sots.py
-├── third_party/               # pinned submodules: dehamer, restormer, nafnet
-├── experiments/               # gitignored: checkpoints, soft labels, PTQ artefacts
-├── results/                   # committed tables and JSON
-├── gpu                        # ./gpu [cmd]  — project-local ssh launcher
-├── .env                       # gitignored cluster credentials
+│   ├── sync_to_cluster.sh             # rsync project → cluster (uses .env)
+│   ├── monitor_nodes.py               # paramiko probe of full teaching-cluster roster
+│   ├── phase2_multi_status.py         # poll all 3 Phase-2 nodes concurrently
+│   ├── launch_phase2_multi.{sh,py}    # multi-node Phase-2 kickoff
+│   ├── launch_phase2_tmux.sh          # single-node Phase-2 kickoff
+│   ├── launch_phase1_tmux.sh          # Phase-1 PTQ kickoff
+│   ├── bootstrap_node.{sh,py}         # SFTP code+ckpt+soft-labels to a fresh node
+│   ├── gen_soft_labels.py             # offline DeHamer pseudo-clean PNGs (Phase-2 prep)
+│   ├── gen_qualitative_samples.py     # paper figure generator (teacher + 3 students per scene)
+│   ├── make_dummy_data.py             # synthesize tiny local hazy/clean pairs
+│   ├── download_reside.sh             # RESIDE downloader (cluster)
+│   ├── download_dehamer_ckpts.sh      # DeHamer checkpoint downloader (cluster)
+│   ├── smoke_dehamer_local.py         # one-shot DeHamer forward sanity check
+│   ├── verify_dehamer_sots.py         # DeHamer SOTS sanity check
+│   └── phase1_status.sh               # remote Phase-1 progress probe
+│
+├── third_party/                       # pinned git submodules (code only)
+│   ├── dehamer/                       # DeHamer model definition
+│   ├── restormer/                     # Restormer model definition
+│   └── nafnet/                        # NAFNet model definition (BasicSR)
+│
+├── experiments/                       # gitignored — large binaries, mirrored to Drive
+│   ├── students/
+│   │   ├── haze_a_small_tight/best.pt              # ~ 51 MB  (NAFNet w16)
+│   │   ├── haze_b_large_tight/best.pt              # ~197 MB  (NAFNet w32, GT target)
+│   │   └── haze_c_large_pseudo/best.pt             # ~197 MB  (NAFNet w32, pseudo target)
+│   ├── teachers/dehamer/ckpts/indoor/
+│   │   └── PSNR3663_ssim09881.pt                   # ~512 MB  (DeHamer indoor teacher)
+│   └── (cluster-only) soft_labels/, ptq/, *.pt epoch checkpoints
+│
+├── results/                           # committed — small JSON / CSV / PNG artefacts
+│   ├── phase1_indoor.csv                           # Phase-1 main table
+│   ├── dehamer_fp32_indoor.json                    # FP32 teacher reference
+│   ├── dehamer_int8_dynamic_indoor.json
+│   ├── dehamer_int8_block_static_indoor.json
+│   ├── dehamer_sensitivity_indoor.json             # per-Linear sensitivity map
+│   ├── eval_student_haze_{a,b,c}_*.json            # per-student SOTS-indoor eval
+│   ├── latency_isolated_haze_{a,b,c}_*.json        # mean ± std isolated-load latency
+│   ├── cluster_status.json                         # last node-roster probe
+│   └── qualitative/                                # paper figure source PNGs
+│       └── 1400_{1..5,10}/
+│           ├── hazy.png                            # input
+│           ├── gt.png                              # SOTS ground-truth clean
+│           ├── teacher_dehamer.png                 # DeHamer output
+│           ├── nodeA_w16.png                       # student A output
+│           ├── nodeB_w32.png                       # student B output
+│           ├── nodeC_w32p.png                      # student C output
+│           └── strip.png                           # composed before/after strip
+│
+├── gpu                                # ./gpu [cmd] — project-local ssh launcher (uses .env)
+├── .env                               # gitignored — cluster credentials
+├── .env.example                       # template
+├── .env.10.8.1.106                    # parked legacy-cluster creds (gitignored)
+├── servers.csv                        # gitignored — full cluster roster
 ├── requirements.txt
-└── README.md
+└── .gitignore                         # excludes experiments/, *.pt, .env, data/*, wandb/
 ```
+
+### 9.1 Where the model weights live
+
+The repo is configured to **never** commit large binaries — `.gitignore`
+excludes `*.pt`, `*.pth`, `*.pkl`, the entire `experiments/` tree, and any
+non-`.py` files under `data/`. Local copies of all weights produced by this
+project are present under `experiments/` at the paths shown above. The
+distribution copies of these weights are uploaded to the project's Google
+Drive folder and are linked from `RUNS.md`. Total local-disk footprint of
+the Phase-1 + Phase-2 weight set is ≈ 957 MB:
+
+| File | Size | Origin |
+|---|---:|---|
+| `experiments/teachers/dehamer/ckpts/indoor/PSNR3663_ssim09881.pt` | 512 MB | DeHamer authors (CVPR 2022) |
+| `experiments/students/haze_a_small_tight/best.pt` | 51 MB | this project |
+| `experiments/students/haze_b_large_tight/best.pt` | 197 MB | this project |
+| `experiments/students/haze_c_large_pseudo/best.pt` | 197 MB | this project |
+
+The qualitative PNGs under `results/qualitative/` (≈ 26 MB total) **are**
+committed — they are the source figures for the paper and small enough that
+versioning them is the right call.
 
 ---
 
