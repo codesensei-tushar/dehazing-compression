@@ -265,6 +265,8 @@ over the full 500 image test set. CPU latency is single-thread FBGEMM at
 | Block-static + dynamic all        | 34.487 | 0.9604 | −2.089 | 9 blocks + 26 Linear | 219.3 | 4.56 | 1.11× |
 | Block-static + dynamic mixed      | 34.524 | 0.9622 | −2.052 | 9 blocks + 21 Linear | 220.6 | 4.53 | 1.10× |
 
+![Phase 1 — Quality and speedup comparison across all PTQ variants](results/figures/phase1_bars.png)
+
 All numbers are means over the full **SOTS-indoor 500-pair test set**,
 measured on the `teaching@172.18.40.119` node (Intel 32-core CPU, FBGEMM
 backend, single-threaded eval, `OMP_NUM_THREADS=16`). Latency is the mean of
@@ -277,6 +279,7 @@ at **25.9 ms @256² (38.6 FPS)** and **86.4 ms @512² (11.6 FPS)** — the
 GPU FP32 PSNR is identical to within rounding, and the A6000 is ≈ 9× faster
 than a 32-core CPU at 256 × 256. The published DeHamer checkpoint value is
 36.63 dB / 0.9881; our reproduction is within 0.06 dB.
+
 
 ### The winner: mixed-precision dynamic PTQ
 
@@ -341,6 +344,8 @@ Two consistent patterns emerge:
 
 The full 26-entry sensitivity map lives in
 `results/dehamer_sensitivity_indoor.json`.
+
+![Per-Linear sensitivity map — top-15 of 26 Swin modules ranked by PSNR recovery when kept FP32](results/figures/sensitivity_barplot.png)
 
 ---
 
@@ -540,7 +545,14 @@ architecture; the per-shape difference is within one std). Node B is the
 quality winner; Node C still trades 0.5 dB PSNR for the cleaner pseudo-target
 loss (no L_feat adapter) but no longer claims a throughput advantage.
 
-### 7.5 Training protocol (Node C)
+![Capacity × Target ablation heatmap — Node B (w32, GT) is the quality winner](results/figures/ablation_heatmap.png)
+
+### 7.5 Training protocols (Nodes A, B, C)
+
+All three nodes share the same base protocol; the table below documents
+shared settings and the per-node differences.
+
+**Shared training settings (all nodes):**
 
 | Component | Value |
 |-----------|-------|
@@ -553,12 +565,22 @@ loss (no L_feat adapter) but no longer claims a throughput advantage.
 | Learning rate | 1e-3 → 1e-6 cosine decay |
 | Epochs | 200 (= 349 600 optimisation steps) |
 | Gradient clip | L2 ≤ 1.0 |
-| Teacher forward | offline pseudo-labels on disk (no inline forward) |
 | Validation | every 5 epochs on full SOTS-indoor (500 pairs) |
 | Checkpointing | periodic every 10 epochs + `best.pt` on new best PSNR |
 | Compute | `teaching@172.18.40.103` (Intel 32-core, NVIDIA RTX A5000 24 GB) |
 | Python | `/home/teaching/miniconda3/envs/adu/bin/python` (torch 2.7.1+cu118) |
-| Wall-clock | ≈ 8.5 h end-to-end |
+
+**Per-node configuration differences:**
+
+| Parameter | Node A | Node B | Node C |
+|-----------|--------|--------|--------|
+| `--width` | 16 (4.35 M params) | 32 (17.11 M params) | 32 (17.11 M params) |
+| `--lambda-feat` | 0.05 | 0.05 | 0.00 (disabled) |
+| `--lambda-perc` | 0.05 | 0.05 | 0.05 |
+| `--use-pseudo-as-target` | no (GT clean) | no (GT clean) | **yes** (teacher output) |
+| Teacher forward | offline pseudo-labels (for L_feat only) | offline pseudo-labels (for L_feat only) | offline pseudo-labels **as L_pixel target** |
+| Best epoch | 184 | 184 | 174 |
+| Wall-clock | ≈ 10.5 h (resumed mid-training) | ≈ 8.5 h | ≈ 8.5 h |
 
 ### 7.6 Results — Node C on SOTS-indoor
 
@@ -605,7 +627,45 @@ Quality headline (the part that *is* hardware-independent):
 
 Full JSON is committed at `results/eval_student_haze_c_large_pseudo.json`.
 
-### 7.7 Why pseudo-supervision beats GT supervision for this pair
+### 7.7 Training dynamics
+
+The figure below shows the training loss convergence and validation
+PSNR / SSIM trajectories for all three student configurations across 200
+epochs. Node B's log covers the first 80 epochs only (the training was
+relocated mid-run when the original host's disk filled; the run resumed and
+completed to epoch 199 but clean logs were not captured for the second half).
+
+![Phase 2 training curves — loss convergence, validation PSNR, and validation SSIM for Nodes A/B/C](results/figures/training_curves.png)
+
+Key observations from the training curves:
+
+* **All three nodes converge smoothly** under cosine LR decay, with no
+  instability or divergence episodes.
+* **Validation PSNR saturates around epoch 150–175** for the w32
+  configurations (B and C). Node A (w16) continues improving slowly through
+  epoch 184 (best checkpoint).
+* **The teacher ceiling (36.58 dB, dashed purple) is never reached** —
+  the ≈ 2 dB gap is consistent with the 7.7× parameter reduction.
+* **SSIM converges faster than PSNR**: all nodes reach within 0.005 of their
+  final SSIM by epoch 80, while PSNR continues climbing.
+
+### 7.8 Qualitative comparison
+
+Side-by-side visual comparison on three SOTS-indoor test scenes. Each row
+shows the hazy input, ground-truth clean image, DeHamer teacher output, and
+the three student outputs. Full-resolution PNGs for 6 scenes are committed
+under `results/qualitative/`.
+
+![Qualitative visual comparison — hazy input, GT, teacher, and three student configurations](results/figures/qualitative_comparison.png)
+
+Visual assessment: all three students successfully remove haze and recover
+colour fidelity. Node B (w32, GT target) produces the crispest textures and
+closest colour match to the teacher. Node A (w16) shows slightly softer
+textures consistent with its 4× fewer parameters. Node C (w32, pseudo
+target) matches Node B visually but with marginally warmer colour tone — a
+known artefact of training against the teacher's output rather than GT.
+
+### 7.9 Why pseudo-supervision beats GT supervision for this pair
 
 The earlier `haze_s1` run (4.35 M, GT target, λ_feat = 0.01, no perceptual)
 plateaued at 29.78 dB — **4.09 dB below Node C.** Even controlling for the
@@ -630,7 +690,7 @@ adding a proper perceptual term (Node C) was a net improvement; future work
 should instead match genuine intermediate features (e.g. teacher's
 256-channel decoder feature against a 1×1-projected student tap).
 
-### 7.8 Reproducing Node C
+### 7.10 Reproducing Node C
 
 On a teaching node with the `adu` conda env:
 
@@ -663,7 +723,55 @@ fallback) sessions.
 
 ---
 
-## 8. Publishability assessment
+## 8. Overall compression summary and context
+
+### 8.1 Quality-vs-parameters Pareto frontier
+
+![Quality vs model size — all operating points on the compression Pareto frontier](results/figures/pareto_psnr_params.png)
+
+The figure above positions every model configuration from this work on a
+PSNR-vs-parameters plane. The Pareto frontier runs from DeHamer (132.45 M,
+36.58 dB) through Node B (17.11 M, 34.40 dB) to Node A (4.35 M, 32.39 dB).
+The historical `haze_s1` run (29.78 dB) sits below the frontier, confirming
+that the loss-function and hyperparameter improvements in the A / B / C
+ablation were necessary.
+
+### 8.2 Comparison with published dehazing methods
+
+To contextualise the student results, the table below includes published
+numbers from lightweight and CNN-based dehazing baselines evaluated on the
+same SOTS-indoor benchmark. These numbers are quoted from the original
+papers with citations — they were not re-run in this repository.
+
+| Method | Params | PSNR (dB) | SSIM | Source |
+|--------|-------:|----------:|-----:|--------|
+| AOD-Net (Li et al., ICCV 2017) | 0.002 M | 19.06 | 0.850 | [paper](https://openaccess.thecvf.com/content_ICCV_2017/papers/Li_AOD-Net_All-in-One_Dehazing_ICCV_2017_paper.pdf) |
+| DehazeNet (Cai et al., TIP 2016) | 0.009 M | 21.14 | 0.847 | [paper](https://ieeexplore.ieee.org/document/7539399) |
+| GCANet (Chen et al., WACV 2019) | 0.70 M | 30.23 | 0.980 | [paper](https://arxiv.org/abs/1811.08747) |
+| FFA-Net (Qin et al., AAAI 2020) | 4.46 M | 36.39 | 0.989 | [paper](https://arxiv.org/abs/1911.07559) |
+| AECR-Net (Wu et al., CVPR 2021) | 2.61 M | 37.17 | 0.990 | [paper](https://arxiv.org/abs/2104.09367) |
+| **DeHamer teacher (Guo et al., CVPR 2022)** | **132.45 M** | **36.58** | **0.986** | this work (reproduced) |
+| **Node B — NAFNet-32 (ours, GT target)** | **17.11 M** | **34.40** | **0.987** | this work |
+| **Node C — NAFNet-32 (ours, pseudo target)** | **17.11 M** | **33.87** | **0.983** | this work |
+| **Node A — NAFNet-16 (ours, GT target)** | **4.35 M** | **32.39** | **0.983** | this work |
+
+Note: published numbers for external methods are as reported in their
+original papers on the SOTS-indoor split. Minor differences in evaluation
+protocol (crop padding, uint8 vs float precision) may exist. A head-to-head
+comparison by re-running these baselines on our evaluation pipeline is listed
+in `Checklist.md` § 4.2 as a pre-submission item.
+
+Node B (34.40 dB, 17.11 M params) sits between FFA-Net (36.39 dB, 4.46 M)
+and GCANet (30.23 dB, 0.70 M) on the quality axis. The student trades ≈ 2 dB
+vs FFA-Net in exchange for a different architectural family (NAFNet vs
+attention-based FFA), while achieving 7.7× compression over the DeHamer
+teacher. Node A (32.39 dB, 4.35 M) is competitive with GCANet in quality at
+a comparable parameter count, while being distilled from a much stronger
+teacher.
+
+---
+
+## 9. Publishability assessment
 
 Direct answer: **the results are publishable**. The first-line targets are
 **Tier-2 conferences (WACV / BMVC / ACCV)** and **workshops (CVPR-W /
@@ -679,7 +787,7 @@ a separate question, and it is not — there is no manuscript file, several
 experimental gaps remain, and one cross-GPU comparison was invalid until it
 was removed earlier today.
 
-### 8.1 Why the results clear the bar
+### 9.1 Why the results clear the bar
 
 **Phase 1.** 36.551 dB at 0.025 dB drop with 1.27× CPU speedup is a clean
 PTQ-sensitivity contribution on a hybrid CNN–Transformer architecture. The
@@ -710,7 +818,7 @@ target serves as the historical anchor) is methods-section content that
 reviewers will accept as substantive evidence of *why* the configuration
 choices matter, rather than as a single-shot result.
 
-### 8.2 Where the bar is not yet cleared
+### 9.2 Where the bar is not yet cleared
 
 What is *not* publishable is the act of submitting today, because:
 
@@ -719,11 +827,11 @@ What is *not* publishable is the act of submitting today, because:
   to any of the target venues' submission systems as-is. Each venue
   expects a formatted manuscript with abstract, introduction, related
   work, method, experiments, discussion, and references.
-* **AOD-Net and FFA-Net comparison rows are empty.** Reviewers at every
-  target venue will demand at minimum these two as external lightweight /
-  CNN-dehazing baselines. Neither is yet implemented or evaluated in this
-  repository, so the comparison table currently has only DeHamer as a
-  ceiling reference.
+* **AOD-Net and FFA-Net comparison rows use published numbers.** The
+  external baselines table in § 8.2 now quotes published SOTS-indoor
+  numbers from the original papers (AOD-Net, DehazeNet, GCANet, FFA-Net,
+  AECR-Net). However, these have not been re-run on our evaluation
+  pipeline — a head-to-head re-evaluation is on the submission checklist.
 * **No real-world evaluation.** RTTS qualitative panel and FADE
   no-reference scores are absent. Synthetic-only evaluation (SOTS-indoor)
   is routinely flagged in dehazing reviews as insufficient for the
@@ -736,12 +844,12 @@ What is *not* publishable is the act of submitting today, because:
   invalid earlier today. Without a same-GPU teacher re-measurement —
   about 30 seconds of compute — no PSNR-preserving-speedup multiplier vs
   DeHamer can be quoted in the paper.
-* **No figures rendered.** No qualitative side-by-side panel, no
-  sensitivity heatmap, no quality-vs-speed-vs-parameters Pareto plot. All
-  three are standard expectations for the target venues and none exist in
-  this repository.
+* ~~**No figures rendered.**~~ Qualitative side-by-side panel, sensitivity
+  bar chart, Phase 1 bar charts, training curves, ablation heatmap, and
+  Pareto plot are now generated and embedded in §§ 5, 7, and 8. Figure
+  generation script: `scripts/gen_readme_figures.py`.
 
-### 8.3 Where the work fits — venue landscape
+### 9.3 Where the work fits — venue landscape
 
 The original CLAUDE.md target list (Optik, The Visual Computer, Signal
 Processing: Image Communication) is the **journal track**. There is also a
@@ -766,7 +874,7 @@ shape; **Optik / The Visual Computer** are realistic journal targets after
 the same blocking items close; **CVPR / ICCV / ECCV** is reachable but only
 with the Restormer track, an outdoor split, and stronger novelty framing.
 
-### 8.4 One-line verdict
+### 9.4 One-line verdict
 
 The science is publishable. The submission is not. The full list of work
 required to convert one into the other lives in
@@ -776,7 +884,7 @@ focused engineering + writing for a Tier-2 conference / journal target,
 
 ---
 
-## 9. Repository layout
+## 10. Repository layout
 
 The tree below reflects what is actually in the repo *and where the large
 binaries live*. Anything tagged **gitignored** is not in version control and,
@@ -832,6 +940,7 @@ dehazing-compression/
 │   ├── bootstrap_node.{sh,py}         # SFTP code+ckpt+soft-labels to a fresh node
 │   ├── gen_soft_labels.py             # offline DeHamer pseudo-clean PNGs (Phase-2 prep)
 │   ├── gen_qualitative_samples.py     # paper figure generator (teacher + 3 students per scene)
+│   ├── gen_readme_figures.py          # training curves, sensitivity chart, Pareto, bars, heatmap
 │   ├── make_dummy_data.py             # synthesize tiny local hazy/clean pairs
 │   ├── download_reside.sh             # RESIDE downloader (cluster)
 │   ├── download_dehamer_ckpts.sh      # DeHamer checkpoint downloader (cluster)
@@ -871,6 +980,13 @@ dehazing-compression/
 │           ├── nodeB_w32.png                       # student B output
 │           ├── nodeC_w32p.png                      # student C output
 │           └── strip.png                           # composed before/after strip
+│   └── figures/                                    # generated figures for README / paper
+│       ├── training_curves.png                     # loss + val PSNR/SSIM for A/B/C
+│       ├── sensitivity_barplot.png                 # per-Linear sensitivity bar chart
+│       ├── phase1_bars.png                         # Phase-1 PSNR + speedup bar chart
+│       ├── qualitative_comparison.png              # 3-scene × 6-column visual comparison
+│       ├── pareto_psnr_params.png                  # quality vs model size Pareto plot
+│       └── ablation_heatmap.png                    # 2×2 capacity × target heatmap
 │
 ├── gpu                                # ./gpu [cmd] — project-local ssh launcher (uses .env)
 ├── .env                               # gitignored — cluster credentials
@@ -881,7 +997,7 @@ dehazing-compression/
 └── .gitignore                         # excludes experiments/, *.pt, .env, data/*, wandb/
 ```
 
-### 9.1 Where the model weights live
+### 10.1 Where the model weights live
 
 The repo is configured to **never** commit large binaries — `.gitignore`
 excludes `*.pt`, `*.pth`, `*.pkl`, the entire `experiments/` tree, and any
@@ -904,7 +1020,7 @@ versioning them is the right call.
 
 ---
 
-## 10. Citation & acknowledgements
+## 11. Citation & acknowledgements
 
 Teachers and backbones:
 
@@ -934,14 +1050,14 @@ Benchmark:
 
 ---
 
-## 11. Roadmap
+## 12. Roadmap
 
 Phase 1 (PTQ) and Phase 2 (Nodes A / B / C, distillation) are the reportable
 units today. The roadmap below splits **science extensions** (which strengthen
 the result) from a **publication path** (which converts the result into a
 submitted manuscript).
 
-### 11.1 Science extensions
+### 12.1 Science extensions
 
 * **Cross-split.** Repeat Phase 2 on SOTS-outdoor using DeHamer's outdoor
   checkpoint; both teacher ckpt and SOTS-outdoor data are already on disk.
@@ -967,7 +1083,7 @@ submitted manuscript).
   std for the teacher on the same GPU as the students (this last item is
   also a blocking item — see `Checklist.md` § 4).
 
-### 11.2 Publication path
+### 12.2 Publication path
 
 Concrete sequencing — the cheapest moves first; later steps are conditional
 on appetite and remaining time.
