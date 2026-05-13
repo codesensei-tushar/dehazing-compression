@@ -86,6 +86,8 @@ def main() -> None:
     ap.add_argument("--lambda-perc", type=float, default=0.0)
     ap.add_argument("--use-pseudo-as-target", action="store_true",
                     help="L_pixel against teacher pseudo-clean instead of GT.")
+    ap.add_argument("--max-samples", type=int, default=0,
+                    help="Subsample training set to N pairs (0 = all). Use for OTS (313K pairs).")
     ap.add_argument("--val-interval", type=int, default=5, help="Epochs between SOTS validation runs.")
     ap.add_argument("--ckpt-interval", type=int, default=10)
     ap.add_argument("--wandb", action="store_true")
@@ -105,6 +107,7 @@ def main() -> None:
         pseudo_dir=args.pseudo_dir,
         patch_size=args.patch,
         augment=True,
+        max_samples=args.max_samples,
     )
     print(f"train pairs: {len(train_ds)}")
     train_loader = DataLoader(

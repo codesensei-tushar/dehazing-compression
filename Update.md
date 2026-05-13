@@ -2,6 +2,48 @@
 
 One-liners; most recent at top. Times approximate (local).
 
+## 2026-05-13 — Cross-dataset eval expansion + outdoor student plan
+
+### Decisions
+- **Scope expanded** to cover the 3 remaining RESIDE benchmark splits: SOTS-outdoor, Dense-Haze, NH-HAZE. All 3 indoor students (A/B/C) will be evaluated cross-domain on each; DeHamer's per-split specialized checkpoints serve as teacher baselines.
+- **Outdoor student** (tag: `haze_outdoor_b`) approved for training — same config as Node B (w32, GT target, λ_feat 0.05, λ_perc 0.05) on 50K OTS subset with outdoor DeHamer checkpoint. This actualises the "condition-specific distillation" claim for the outdoor case.
+- Dense-Haze (55 pairs, 50 train + 5 test) and NH-HAZE (55 pairs, 50 train + 5 test) are evaluation-only — too few pairs to train a student. Cross-domain eval of indoor students against specialized teacher checkpoints.
+
+### Code changes
+- **`data/reside.py`**: `ITSPairDataset` gains `max_samples` (for OTS subsampling, seed=42); GT lookup now also tries `.jpg` extension. `SOTSEvalDataset` tries both `.png` and `.jpg` for GT. New `SimplePairEvalDataset` for Dense-Haze / NH-HAZE: tries same-stem match, then `_hazy`→`_GT` suffix convention (confirmed layout: `01_hazy.png` ↔ `01_GT.png`), then sorted-index fallback.
+- **`phase2_distill/eval_student.py`**: Fully rewritten to accept `--split indoor|outdoor|dense|nh`, `--hazy-dir`, `--gt-dir`. Default paths are per-split; backward-compatible (default split=indoor). Output JSON includes `split` field; filename appends `_<split>` for non-indoor.
+- **`evaluate/benchmark_dehamer.py`**: Extended with `dense` and `nh` splits; all 4 DeHamer checkpoints registered; `--hazy-dir`/`--gt-dir` overrides; 1:1 stem-match pair loader for real-world datasets.
+- **`phase2_distill/train.py`**: `--max-samples` wired to `ITSPairDataset` for OTS subsampling.
+- **`scripts/eval_all_splits.sh`**: Runs all 3 students + teacher baselines on outdoor/dense/nh; skips gracefully if datasets not found.
+- **`scripts/launch_outdoor_student.sh`**: 3-step pipeline (soft labels 50K OTS → train → eval on SOTS-outdoor).
+
+### Cluster bootstrap (teaching@172.18.40.119, RTX A5000)
+- Cluster was clean: no data, no checkpoints. Rebuilt from scratch.
+- Student checkpoints (A/B/C) and indoor teacher ckpt pushed from local via rsync (total ~1GB).
+- `/DATA` mount (9.1T, 6.4T free) used for all datasets; `data/RESIDE`, `data/Dense-Haze`, `data/NH-HAZE` symlinked to `/DATA/datasets/dehazing/`.
+- RESIDE `bit.ly` links dead again (redirect to UTex Box 404). Used DeHamer README's own GDrive table instead — IDs confirmed: SOTS-Test `1IyZPih5…`, Dense-Haze `1OOyeu2p…`, NH-HAZE `1qPYGkCf…`.
+- gdown (v6.0.0) installed in `adu` env; used as `python -m gdown` to bypass broken shebang script at `~/.local/bin/gdown`.
+- Downloads completed: **SOTS-Test** (435MB) ✅, **Dense-Haze** (250MB) ✅, **NH-HAZE** (315MB) ✅.
+- DeHamer all-4-checkpoints folder download in progress (NH ckpt at ~42% when last checked; outdoor and dense already landed).
+- Confirmed data layout on cluster:
+  - `SOTS-Test/valid_outdoor/input` + `gt` (500 pairs) ← SOTS-outdoor eval
+  - `Dense-Haze/valid_dense/input` + `gt` (5 pairs, test split)
+  - `NH-HAZE/valid_NH/input` + `gt` (5 pairs, test split)
+
+### Running now (tmux on 172.18.40.119)
+- `dl_setup` — downloading DeHamer NH+outdoor ckpts (folder download, ~537MB each).
+- `cross_eval` — waiting for `BOOTSTRAP_V2_DONE` in log, then auto-runs: teacher baselines + all 3 students on outdoor / dense / nh in sequence. Results → `results/eval_student_<tag>_<split>.json` and `results/dehamer_fp32_<split>.json`.
+
+### Next steps
+1. Pull cross-domain eval results once `cross_eval` session completes (~20 min after ckpt download finishes).
+2. ITS data (4.5GB, GDrive ID `1lE6FyHS…`) must be downloaded for outdoor student training — not yet done.
+3. Launch `scripts/launch_outdoor_student.sh` once ITS (or OTS subset) is on cluster.
+4. Same-GPU teacher latency re-measurement on 172.18.40.119 (was done on 172.18.40.103 before) — needed before quoting speedup multiplier.
+5. Manuscript: convert README to LaTeX; AOD-Net + FFA-Net baseline rows (quoted from papers or re-run).
+6. Real-world qualitative: RTTS eval + FADE scores (dataset not yet downloaded).
+
+---
+
 ## 2026-05-13 — Teacher latency + checklist / manuscript prep
 
 - **Same-GPU teacher latency resolved.** Wrote `phase1_quantize/bench_teacher_latency.py` (mirrors student bench: 5×100-iter CUDA-event reps). Ran on 172.18.40.103 RTX A5000: **13.91 ± 0.01 ms @256² (71.9 FPS) / 46.04 ± 0.21 ms @512² (21.7 FPS)**. Key finding: students are 2.1–2.6× slower at 256² (Swin attention overhead-efficient at small inputs) but **1.35–1.39× faster at 512²** — the practical deployment resolution. Speedup claim in paper scoped to 512×512. JSON: `results/latency_isolated_dehamer_teacher.json`.
