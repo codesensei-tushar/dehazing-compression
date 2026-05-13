@@ -1,7 +1,7 @@
 # Submission Readiness Checklist
 
-Date: 2026-04-26
-Scope: Phase-1 PTQ + Phase-2 distillation (haze)
+Date: 2026-05-13
+Scope: Phase-1 PTQ + Phase-2 distillation (haze + rain)
 
 ## 1. Current Evidence Snapshot
 
@@ -77,15 +77,27 @@ items are the universal floor.
 
 - [x] Finish Node A run and evaluate `best.pt` with `phase2_distill/eval_student.py`. *(Complete 2026-04-26: 32.391 / 0.9829.)*
 - [x] Re-run latency for **students** under isolated GPU load. *(Complete 2026-04-26 via `phase2_distill/bench_latency.py`, 5x100-iter mean +/- std, A5000, GPU 0% baseline. JSONs in `results/latency_isolated_*.json`.)*
-- [ ] **Re-measure the DeHamer teacher latency on the SAME RTX A5000 host** (172.18.40.103). The published Phase-1 teacher latency (25.9 ms @256 / 86.4 ms @512) was measured on cs671 A6000 and cannot be compared to the A5000 student numbers. Without this, no PSNR-preserving-speedup multiplier vs DeHamer can be quoted in the paper. ~30 seconds of compute.
+- [x] **Re-measure the DeHamer teacher latency on the SAME RTX A5000 host** (172.18.40.103). *(Complete 2026-05-13: 13.91 ± 0.01 ms @256² / 46.04 ± 0.21 ms @512². Students slower at 256² but 1.35–1.39× faster at 512². Speedup claim scoped to 512×512. JSON: `results/latency_isolated_dehamer_teacher.json`.)*
 - [ ] Finalize the full 2x2 ablation story (capacity x supervision target) in one consolidated table. *(All four cells measured; remaining work is to write the consolidated table into the paper, not to run.)*
-- [ ] **Write the manuscript.** Convert README.md into a venue-appropriate LaTeX file (IEEEtran / Springer LNCS / Optik / conference style). Abstract, intro, related work, method, experiments, discussion, references. No `.tex` exists today.
-- [ ] **Render figures.** Quality-vs-parameters Pareto plot, sensitivity heatmap, qualitative side-by-side panel, ablation bar chart.
+- [ ] **Write the manuscript.** No `.tex` exists today. Sub-tasks:
+  - [ ] Set up LaTeX skeleton — IEEEtran template (targets WACV/BMVC/Optik)
+  - [ ] Abstract + Introduction + Contributions (condition-specific angle)
+  - [ ] Related Work (dehazing, PTQ, knowledge distillation)
+  - [ ] Method §A: PTQ (sensitivity scan, mixed-precision strategy)
+  - [ ] Method §B: Condition-specific distillation (loss, adapter, soft-label trick)
+  - [ ] Experiments: main results table, PTQ table, 2×2 ablation table, latency table
+  - [ ] Discussion + Conclusion + References
+- [ ] **Render figures.** Sub-tasks:
+  - [ ] Pareto plot: PSNR vs params (all models: teacher, PTQ variants, students A/B/C, baselines)
+  - [ ] Sensitivity heatmap: per-layer PSNR drop from `results/dehamer_sensitivity_indoor.json`
+  - [ ] Qualitative side-by-side: hazy → DeHamer → student B (4 SOTS-indoor crops)
+  - [ ] Ablation bar chart: 2×2 capacity × supervision-target
 
 ### 4.2 Required for Tier-2 conferences (WACV / BMVC / ACCV) and journals (Optik / TVC / SPIC)
 
 - [ ] Add at least 2 external baselines in one comparison table (**AOD-Net** and **FFA-Net** minimum). Either re-run on SOTS-indoor here or quote published numbers with citations.
 - [ ] Add RTTS qualitative panel (and **FADE** no-reference scores if feasible) to strengthen real-world relevance. Synthetic-only evaluation is the single most common rejection reason for dehazing papers.
+- [ ] **Rain student.** Train NAFNet-32 student on Rain13K with Restormer (deraining checkpoint, no fine-tune needed) as teacher. Eval on Rain100H/L. Makes "condition-specific" concrete: one recipe, two degradation types, two students. ~12-18 h on A5000.
 - [ ] Sharpen "condition-specific distillation" novelty framing in the introduction and contributions section. Currently reads as "applied known techniques carefully"; should read as a method.
 
 ### 4.3 Required for Tier-1 conferences (CVPR / ICCV / ECCV)

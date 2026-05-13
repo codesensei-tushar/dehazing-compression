@@ -2,6 +2,12 @@
 
 One-liners; most recent at top. Times approximate (local).
 
+## 2026-05-13 — Teacher latency + checklist / manuscript prep
+
+- **Same-GPU teacher latency resolved.** Wrote `phase1_quantize/bench_teacher_latency.py` (mirrors student bench: 5×100-iter CUDA-event reps). Ran on 172.18.40.103 RTX A5000: **13.91 ± 0.01 ms @256² (71.9 FPS) / 46.04 ± 0.21 ms @512² (21.7 FPS)**. Key finding: students are 2.1–2.6× slower at 256² (Swin attention overhead-efficient at small inputs) but **1.35–1.39× faster at 512²** — the practical deployment resolution. Speedup claim in paper scoped to 512×512. JSON: `results/latency_isolated_dehamer_teacher.json`.
+- Updated README §7.4 ablation table to include teacher latency row; §7.6 Node-C comparison table now has same-GPU latency rows; limitations §9.2 resolved item struck through.
+- Updated `Checklist.md`: date → 2026-05-13, teacher latency item ticked, manuscript expanded to sub-tasks, figures expanded to sub-tasks, Rain student added as §4.2 item.
+
 ## 2026-04-26 — Isolated-load latency re-measurement (B = C ≠ what we claimed)
 
 - **11:00** · Latency story revised in README §7.4 + §7.6 + headline. Old single-window measurement claimed Node C at 43.1 FPS @256² (the "throughput winner"). New 5×100-iter isolated-load mean ± std on the same RTX A5000: **A 29.70 ± 0.05 ms (33.7 FPS) · B 32.89 ± 2.23 ms (30.4 FPS) · C 36.40 ± 0.64 ms (27.5 FPS) at 256²**. B and C are essentially throughput-equivalent (same architecture, within one std at 512²); A is now the throughput winner. Old `eval_student_*.json` 256² values for B and C disagreed by ≈ 37 % across two different days — that was inter-window/contention variance, not a real model difference. Per-shape `samples_ms` arrays in `results/latency_isolated_*.json` show ≈ 20 % spread within a single isolated session, confirming the architecture is overhead/memory-bound on this small input → mean ± std is the right reporting form.

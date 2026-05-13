@@ -16,11 +16,12 @@ Hinton et al.'s soft-target distillation
 ([Hinton, Vinyals, Dean, 2015](https://arxiv.org/abs/1503.02531)).
 
 Headline result (Phase 2, SOTS-indoor 500 pairs, RTX A5000):
-**Node B 34.40 dB / 0.9865 (quality winner, 17.1 M params) and Node A
-32.39 dB / 0.9829 (throughput winner, 4.35 M params at ≈ 33.7 FPS @256²).**
-Both are within the 2.2 dB PSNR / 0.003 SSIM gap of the 132.45 M-parameter
-DeHamer teacher. A same-GPU teacher re-measurement is required before
-quoting a speedup multiplier vs DeHamer (see §7.4).
+**Node B 34.40 dB / 0.9865 at 7.7× fewer parameters (17.1 M vs 132.45 M),
+1.35× faster at 512×512 (34.1 ms vs 46.0 ms, same RTX A5000).**
+Node A (4.35 M, 30.5× smaller) reaches 32.39 dB / 0.9829 at 1.39× faster
+@512×512. At 256×256 DeHamer's Swin attention is overhead-efficient and
+faster than NAFNet; the latency advantage reverses at 512×512 — the
+practical resolution for real-world dehazing applications.
 
 A living changelog is maintained in [`Update.md`](Update.md); active
 training-run registry in [`RUNS.md`](RUNS.md); and submission-readiness
@@ -523,9 +524,10 @@ three runs are now complete (final results in `results/eval_student_*.json`):
 
 | Tag | Width | Params | Target | PSNR / SSIM (SOTS-indoor 500) | Latency @256² (ms) | Latency @512² (ms) |
 |-----|------:|-------:|--------|------------------------------:|-------------------:|-------------------:|
-| `haze_a_small_tight`  | 16 |  4.35 M | GT clean       | 32.39 / 0.9829         | **29.70 ± 0.05** | 33.09 ± 3.39 |
-| `haze_b_large_tight`  | 32 | 17.11 M | GT clean       | **34.40** / **0.9865** | 32.89 ± 2.23     | 34.13 ± 1.80 |
-| `haze_c_large_pseudo` | 32 | 17.11 M | Teacher output | 33.87 / 0.9834         | 36.40 ± 0.64     | 33.84 ± 1.16 |
+| DeHamer teacher | — | 132.45 M | — | 36.576 / 0.9862 | **13.91 ± 0.01** | 46.04 ± 0.21 |
+| `haze_a_small_tight`  | 16 |  4.35 M | GT clean       | 32.39 / 0.9829         | 29.70 ± 0.05 | **33.09 ± 3.39** |
+| `haze_b_large_tight`  | 32 | 17.11 M | GT clean       | **34.40** / **0.9865** | 32.89 ± 2.23 | 34.13 ± 1.80 |
+| `haze_c_large_pseudo` | 32 | 17.11 M | Teacher output | 33.87 / 0.9834         | 36.40 ± 0.64 | 33.84 ± 1.16 |
 
 Latency: mean ± std over 5 independent 100-iteration CUDA-event windows
 (10-iter warmup each), single RTX A5000, GPU 0 % baseline utilisation, no
@@ -614,16 +616,17 @@ Comparison against the DeHamer teacher (same SOTS-indoor 500 pairs):
 | PSNR | 36.576 dB | **33.869 dB** | −2.71 dB |
 | SSIM | 0.9862 | **0.9834** | −0.003 |
 | Params | 132.45 M | **17.11 M** | **7.7× smaller** |
+| Latency @256² | 13.91 ± 0.01 ms | 36.40 ± 0.64 ms | 2.62× slower |
+| Latency @512² | 46.04 ± 0.21 ms | 33.84 ± 1.16 ms | **1.36× faster** |
 
-Throughput comparison vs the teacher is intentionally omitted from this row:
-the teacher's Phase-1 latency (25.9 ms @256² / 86.4 ms @512²) was measured
-on a different GPU (A6000 on cs671 cluster) than the Phase-2 student latency
-above (A5000 on teaching cluster). A same-GPU re-measurement of the teacher
-is on the submission checklist before any speedup multiplier is quoted in
-the paper.
+Both latency rows use the same RTX A5000 host (`results/latency_isolated_*.json`).
+DeHamer's Swin attention is overhead-efficient at small inputs; NAFNet students
+amortize fixed overhead at larger resolution and pull ahead at 512² — the
+practical resolution for real-world dehazing. The speedup claim in the paper is
+scoped to 512×512.
 
-Quality headline (the part that *is* hardware-independent):
-**7.7× fewer parameters, 0.003 lower SSIM, 2.71 dB lower PSNR.**
+Quality + efficiency headline:
+**7.7× fewer parameters, 1.36× faster @512×512, −2.71 dB / −0.003 SSIM.**
 
 Full JSON is committed at `results/eval_student_haze_c_large_pseudo.json`.
 
@@ -837,13 +840,13 @@ What is *not* publishable is the act of submitting today, because:
   is routinely flagged in dehazing reviews as insufficient for the
   application motivation (autonomous driving, surveillance, license-plate
   recognition) that frames the contribution.
-* **Same-GPU teacher latency is missing.** The Phase-1 teacher latency
-  numbers were measured on an A6000 in the cs671 cluster; all Phase-2
-  student latency numbers are on an A5000 in the teaching cluster
-  (172.18.40.103). The cross-GPU comparison was removed from § 7.6 as
-  invalid earlier today. Without a same-GPU teacher re-measurement —
-  about 30 seconds of compute — no PSNR-preserving-speedup multiplier vs
-  DeHamer can be quoted in the paper.
+* ~~**Same-GPU teacher latency is missing.**~~ Resolved 2026-05-13.
+  DeHamer teacher re-measured on the same RTX A5000 (172.18.40.103):
+  13.91 ± 0.01 ms @256² / 46.04 ± 0.21 ms @512². Students are slower
+  at 256² (Swin attention has low overhead at small inputs) but 1.35–1.39×
+  faster at 512², the practical deployment resolution. All speedup claims
+  in the paper are now scoped to 512×512 with same-GPU evidence.
+  JSON: `results/latency_isolated_dehamer_teacher.json`.
 * ~~**No figures rendered.**~~ Qualitative side-by-side panel, sensitivity
   bar chart, Phase 1 bar charts, training curves, ablation heatmap, and
   Pareto plot are now generated and embedded in §§ 5, 7, and 8. Figure

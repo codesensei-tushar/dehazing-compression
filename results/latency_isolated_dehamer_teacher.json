@@ -1,0 +1,36 @@
+{
+  "tag": "dehamer_teacher",
+  "params_M": 132.45,
+  "gpu": "NVIDIA RTX A5000",
+  "reps": 5,
+  "per_rep_iters": 100,
+  "per_rep_warmup": 10,
+  "shape_256": {
+    "samples_ms": [
+      13.9119,
+      13.9278,
+      13.9089,
+      13.9238,
+      13.9018
+    ],
+    "mean_ms": 13.9149,
+    "std_ms": 0.0096,
+    "min_ms": 13.9018,
+    "max_ms": 13.9278,
+    "fps_mean": 71.866
+  },
+  "shape_512": {
+    "samples_ms": [
+      45.7579,
+      45.8729,
+      46.0039,
+      46.2188,
+      46.3362
+    ],
+    "mean_ms": 46.038,
+    "std_ms": 0.2138,
+    "min_ms": 45.7579,
+    "max_ms": 46.3362,
+    "fps_mean": 21.721
+  }
+}
