@@ -1,0 +1,71 @@
+================================================================================
+Title (recommended)
+================================================================================
+
+Compressing Transformer Dehazers: Post-Training Quantization and
+Condition-Specific Distillation for Real-Time Image Dehazing
+
+
+Alternative titles
+------------------
+1. Real-Time Image Dehazing via Post-Training Quantization and
+   Condition-Specific Distillation of Transformer Teachers
+2. From Heavy Transformers to Real-Time Dehazers: A Practical
+   Quantization-Distillation Pipeline for Single-Image Dehazing
+3. Practical Compression of Transformer-Based Image Dehazers:
+   A Two-Stage PTQ and Condition-Specific Distillation Pipeline
+
+
+================================================================================
+Abstract
+================================================================================
+
+Transformer-based image dehazing models such as DeHamer and Restormer have
+recently demonstrated state-of-the-art performance on synthetic and
+real-world hazy benchmarks by leveraging long-range attention and
+physics-aware position embeddings learned from large hazy/clean image
+corpora. However, the dense attention layers and high parameter footprint
+of these architectures introduce substantial computational overhead --
+132.5 M parameters and 46 ms per 512x512 forward pass on a server-class
+GPU for DeHamer -- limiting practical deployment in real-world dehazing
+applications such as autonomous-driving perception, surveillance video
+analytics, and on-device license-plate recognition. Existing acceleration
+approaches often require retraining the teacher, architectural redesign,
+or specialised lightweight backbones, making them difficult to integrate
+with pretrained restoration pipelines. Motivated by the need for efficient
+and deployment-friendly transformer dehazing, we present a practical
+two-stage compression pipeline for blind single-image dehazing.
+
+In this work, we investigate complementary compression strategies for
+transformer-based dehazers. Specifically, we evaluate two orthogonal
+stages: Post-Training Quantization (PTQ) with per-layer sensitivity
+analysis, and Condition-Specific Knowledge Distillation into a lightweight
+NAFNet student. Each stage addresses a different source of inefficiency
+in dehazing inference, including numerical-precision overhead in attention
+projections, parameter redundancy in the encoder-decoder, and capacity
+over-provisioning for a single restoration condition. The PTQ stage
+applies dynamic and static INT8 quantization to all linear projections,
+then reverts the top-5 most sensitive layers to FP32, yielding a
+training-free mixed-precision configuration. The distillation stage
+transfers DeHamer's offline soft labels and intermediate decoder features
+into a NAFNet-32 student, with a width-16 variant for extreme-lightweight
+deployment, both supervised by a combined pixel, feature-matching, and
+perceptual objective.
+
+Extensive experiments on the SOTS-indoor and SOTS-outdoor benchmarks
+demonstrate substantial reductions in parameters and latency while
+preserving restoration quality. In particular, mixed-precision INT8 PTQ
+reduces DeHamer's inference cost from 242.5 to 190.2 ms per image --
+approximately 21.6% faster -- at only 0.03 dB PSNR drop (36.58 -> 36.55
+dB) on SOTS-indoor, with sensitivity analysis showing that fewer than 20%
+of linear projections account for the bulk of quantization error.
+Condition-specific distillation further compresses the teacher by 7.7x
+(132.45 M -> 17.11 M parameters) and achieves 34.40 dB / 0.9865 SSIM at
+1.35x faster 512x512 inference (46.0 -> 34.1 ms on the same RTX A5000),
+while an extreme-lightweight 4.35 M-parameter variant -- 30.5x smaller
+than the teacher -- still attains 32.39 dB / 0.9829 SSIM and runs at over
+30 FPS at 512x512. Together, these results show that orthogonal
+compression of pretrained transformer dehazers can deliver near-teacher
+PSNR and SSIM with order-of-magnitude reductions in model footprint,
+while maintaining comparable or superior quality to existing lightweight
+dehazing baselines.
