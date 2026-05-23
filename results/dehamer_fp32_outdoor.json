@@ -1,0 +1,17 @@
+{
+  "model": "DeHamer-FP32",
+  "split": "outdoor",
+  "ckpt": "experiments/teachers/dehamer/ckpts/outdoor/PSNR3518_SSIM09860.pt",
+  "n_params": 132449787,
+  "params_M": 132.45,
+  "psnr_mean": 35.05224622205572,
+  "ssim_mean": 0.9852823508346503,
+  "psnr_min": 24.901315570599568,
+  "psnr_max": 42.950721261531314,
+  "n_images": 500,
+  "wall_time_s": 43.605941280024126,
+  "latency_ms_256": 13.90581787109375,
+  "latency_ms_512": 46.708046875,
+  "fps_256": 71.91234699533324,
+  "fps_512": 21.409587146219117
+}

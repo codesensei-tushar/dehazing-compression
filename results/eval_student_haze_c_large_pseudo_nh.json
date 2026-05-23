@@ -1,0 +1,36 @@
+{
+  "model": "NAFNet-student",
+  "tag": "haze_c_large_pseudo",
+  "split": "nh",
+  "ckpt": "/home/teaching/dehazing-compression/experiments/students/haze_c_large_pseudo/best.pt",
+  "best_psnr_train_reported": 33.86922056195709,
+  "epoch_saved": 174,
+  "n_params": 17111907,
+  "params_M": 17.112,
+  "device": "cuda",
+  "width": 32,
+  "train_config": {
+    "width": 32,
+    "lambda_feat": 0.0,
+    "lambda_perc": 0.05,
+    "use_pseudo_as_target": true,
+    "epochs": 200,
+    "batch": 8,
+    "patch": 128
+  },
+  "eval": {
+    "psnr_mean": 12.679896937774453,
+    "ssim_mean": 0.4025092312354137,
+    "psnr_min": 11.250229076021698,
+    "psnr_max": 14.313784938229556,
+    "ssim_min": 0.3533262858744089,
+    "ssim_max": 0.44675391948349824,
+    "n_images": 5,
+    "wall_time_s": 3.74895572301466,
+    "ms_per_img": 749.791144602932
+  },
+  "latency_ms_256": 21.4689306640625,
+  "latency_ms_512": 33.0834228515625,
+  "fps_256": 46.57893845052705,
+  "fps_512": 30.226618463475305
+}

@@ -1,0 +1,17 @@
+{
+  "model": "DeHamer-FP32",
+  "split": "nh",
+  "ckpt": "experiments/teachers/dehamer/ckpts/NH/PSNR2066_SSIM06844.pt",
+  "n_params": 132449787,
+  "params_M": 132.45,
+  "psnr_mean": 20.6460761570444,
+  "ssim_mean": 0.6843916133770048,
+  "psnr_min": 18.2808060070805,
+  "psnr_max": 23.781362347166844,
+  "n_images": 5,
+  "wall_time_s": 4.191700522904284,
+  "latency_ms_256": 14.014739990234375,
+  "latency_ms_512": 47.4682470703125,
+  "fps_256": 71.3534464925365,
+  "fps_512": 21.06671431364943
+}

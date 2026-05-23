@@ -1,0 +1,17 @@
+{
+  "model": "DeHamer-FP32",
+  "split": "dense",
+  "ckpt": "experiments/teachers/dehamer/ckpts/dense/PSNR1662_SSIM05602.pt",
+  "n_params": 132449787,
+  "params_M": 132.45,
+  "psnr_mean": 16.650144078875243,
+  "ssim_mean": 0.5596026522280735,
+  "psnr_min": 11.96904875955429,
+  "psnr_max": 22.88634009689322,
+  "n_images": 5,
+  "wall_time_s": 4.188560344045982,
+  "latency_ms_256": 14.0756689453125,
+  "latency_ms_512": 47.637412109375,
+  "fps_256": 71.04458082136277,
+  "fps_512": 20.991904381875543
+}
