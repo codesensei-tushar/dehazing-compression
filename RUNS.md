@@ -2,6 +2,19 @@
 
 Live register of Phase-2 distillation runs across cluster nodes. Updated as we go.
 
+## Cluster topology — three roles
+
+| Role | Node | Purpose |
+|------|------|---------|
+| Code source | local `/home/tushar/dehazing-compression` | Claude Code edits, sync hub for `.py`/`.sh`/configs |
+| Big-file hub | `tushar@10.8.48.242` (rudra) | All checkpoint-class files (teacher + student .pt, soft labels, dehazed dirs) — see `CLAUDE.md` §"Big-file routing" |
+| Compute workers | `teaching@172.18.40.{103, 113, 115, 119, 133, 139, …}` | Run training / eval. Each node downloads its own dataset to `/DATA` via gdown; pulls ckpts from rudra over LAN |
+
+rudra↔teaching auth: rudra's pubkey lives in `~/.ssh/authorized_keys` on
+each teaching node (added 2026-05-26 for .{119,113,133,139}). Wrapper on
+rudra: `~/ssh_teaching <host> <cmd>` invokes ssh with the correct `-i`
+flag.
+
 ## Teaching-node password
 All teaching accounts share `ds123`. To SSH directly:
 

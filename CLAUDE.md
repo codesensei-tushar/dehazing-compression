@@ -231,6 +231,65 @@ sshpass -p "$CLUSTER_PASSWORD" rsync -avz \
   "$CLUSTER_USER@$CLUSTER_HOST:dehazing-compression/results/" ./results/
 ```
 
+Only small artefacts (result JSONs, CSVs, figure PNGs <1MB) come back to
+local. Big files (checkpoints, dehazed-output PNG dirs, soft-labels) are
+fetched **server-to-server** to the rudra hub (see next section), never to
+local.
+
+## Big-file routing — rudra hub (`tushar@10.8.48.242`)
+
+A separate cluster machine **`rudra` (`10.8.48.242`)** acts as the
+checkpoint-class file hub:
+
+- Same intranet as the teaching nodes (ping 0.85 ms from 172.18.40.119),
+  so transfers between rudra and any teaching node run at LAN speed and
+  consume **zero** of the developer's home bandwidth.
+- Hardware: NVIDIA RTX 5000 Ada (32 GB VRAM) — usable as an additional
+  compute node, not just storage.
+- Disk: `/data1` mount, ~1.4 TB free. All checkpoint-class files live
+  under `/data1/tushar/bmvc/` (symlinked from `~/bmvc`).
+- Auth: passwordless SSH from the developer's local machine
+  (`ssh tushar@10.8.48.242`).
+- Cross-node auth: an SSH keypair at `~/.bmvc_to_teaching{,.pub}` on rudra,
+  with rudra's pubkey appended to `~/.ssh/authorized_keys` on each
+  teaching node. Wrapper script: `~/ssh_teaching <host> <cmd>` on rudra.
+
+**Routing rules**
+- **Code (.py, .sh, .md, configs, requirements):** local ↔ all nodes via
+  `scripts/sync_to_cluster.sh` (per-node variant when needed).
+- **Checkpoint-class files (.pt teacher + student weights, soft-labels,
+  dehazed-output dirs):** live on **rudra:/data1/tushar/bmvc/**. Other
+  compute nodes pull them from rudra via intra-cluster rsync.
+- **Full datasets (RESIDE ITS / OTS / SOTS / RTTS / Rain13K / GoPro):**
+  each compute node downloads its own copy to its own `/DATA` via gdown.
+  Do not mirror datasets across nodes — they are too big and gdown is
+  fast enough per node.
+- **Result JSONs / CSVs / figure PNGs (<1 MB each):** sync back to local
+  via `rsync --include '*.json'` filters.
+
+**Cross-node big-file pull pattern (issue from local, data flows
+server-to-server, zero home net)**
+```
+# 119 → rudra: pull a checkpoint
+ssh tushar@10.8.48.242 \
+    'rsync -avz -e "ssh -i ~/.bmvc_to_teaching -o StrictHostKeyChecking=no" \
+      teaching@172.18.40.119:dehazing-compression/experiments/teachers/dehamer/ckpts/indoor/ \
+      /data1/tushar/bmvc/experiments/teachers/dehamer/ckpts/indoor/'
+
+# rudra → teaching node: push a checkpoint to a worker
+ssh tushar@10.8.48.242 \
+    'rsync -avz -e "ssh -i ~/.bmvc_to_teaching -o StrictHostKeyChecking=no" \
+      /data1/tushar/bmvc/experiments/students/haze_b_large_tight/best.pt \
+      teaching@172.18.40.113:dehazing-compression/experiments/students/haze_b_large_tight/'
+```
+
+**Never do this** (it relays bytes through the developer's home network):
+```
+# BAD: bytes flow 119 → local → rudra
+rsync teaching@172.18.40.119:... /tmp/relay/...
+rsync /tmp/relay/... tushar@10.8.48.242:...
+```
+
 ## Cluster Python environment
 
 ### Active compute target: `teaching@172.18.40.119` (dslab)

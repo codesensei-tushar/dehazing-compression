@@ -143,7 +143,23 @@ Code is developed locally under `/home/tushar/dehazing-compression`. A
 project-local `./gpu` script (sourcing a git-ignored `.env`) opens a password
 SSH session to the cluster, and `./scripts/sync_to_cluster.sh` uses `rsync` to
 push code changes. All training and evaluation runs on the cluster; Claude
-Code tooling never runs remotely. The full workflow is described in
+Code tooling never runs remotely.
+
+To keep developer home bandwidth out of the loop, the project uses a
+**three-tier file routing** scheme:
+
+| Tier | What | Where it lives |
+|------|------|----------------|
+| Code (.py / .sh / configs) | local source of truth, mirrored to compute nodes | rsync from local |
+| Checkpoint-class (.pt teacher + student weights, soft labels, dehazed PNG dirs) | central hub `tushar@10.8.48.242` (rudra) under `/data1/tushar/bmvc/` | LAN, never local |
+| Datasets (RESIDE ITS/OTS/SOTS, RTTS, Rain13K, GoPro) | per-node `/DATA` via direct `gdown` | not replicated |
+| Result JSONs / CSVs / small figure PNGs | local + git | rsync from cluster |
+
+The rudra hub (RTX 5000 Ada, 32 GB VRAM, `/data1` 1.4 TB free) sits on the
+same intranet as the teaching nodes (0.85 ms ping), so any checkpoint push or
+pull between rudra and a teaching node runs at LAN speed. The full workflow,
+including the cross-node `ssh tushar@rudra "rsync teaching@<x>:..."` pattern
+used to keep bytes off the developer's home internet, is documented in
 [`CLAUDE.md`](CLAUDE.md).
 
 ---

@@ -2,6 +2,100 @@
 
 One-liners; most recent at top. Times approximate (local).
 
+## 2026-05-26 — Big-file routing through rudra hub; no more local relays
+
+### Why
+Some checkpoint pulls in the previous session went through the developer's
+home connection (DeHamer indoor ckpt 537 MB + student A best.pt 52 MB
+to `/tmp/relay/` on local). That was unsustainable for the larger pulls
+coming up (other students, soft labels, future ckpts). Codified a routing
+rule so no big file ever lands on local again.
+
+### New routing model (now in `CLAUDE.md` §"Big-file routing — rudra hub")
+- **Code (.py/.sh/configs)**: local source of truth → rsync to compute nodes.
+- **Checkpoints, soft labels, dehazed-output dirs**: live ONLY on
+  `tushar@10.8.48.242` (rudra) under `/data1/tushar/bmvc/`. Compute nodes
+  pull from rudra over LAN.
+- **Datasets (RESIDE/Rain13K/RTTS/GoPro)**: per-node `/DATA`, downloaded
+  directly via gdown on the compute node. Not replicated across nodes.
+- **Results (JSON/CSV/small PNGs)**: rsync back to local + git.
+
+### What rudra is
+- `tushar@10.8.48.242` ("rudra"). Same intranet as teaching nodes
+  (ping 0.85 ms from `172.18.40.119`).
+- NVIDIA RTX 5000 Ada (32 GB VRAM). Idle.
+- `/data1`: 8.7 TB, 1.4 TB free. All ckpts mount there.
+- `~/.ssh` is root-owned (can't add keys directly). Workaround:
+  generated `~/.bmvc_to_teaching{,.pub}` outside `.ssh`, appended rudra's
+  pubkey to `~/.ssh/authorized_keys` on each teaching node. Wrapper
+  `~/ssh_teaching` on rudra wraps the `-i` flag. Auth flow:
+  `local → rudra (key)` and `rudra → teaching (key)`.
+- Already added: 172.18.40.{119, 113, 133, 139}. Add new teaching nodes by
+  appending the rudra pubkey to their `~/.ssh/authorized_keys`.
+- `~/bmvc → /data1/tushar/bmvc` symlink for convenience.
+
+### Local hygiene
+- `/tmp/relay/` wiped. Local `/tmp` now back to ~250 KB. Going forward,
+  any rsync that would create files >~10 MB on local is forbidden.
+
+### Cross-node big-file pull pattern (canonical)
+```
+ssh tushar@10.8.48.242 \
+    'rsync -avz -e "ssh -i ~/.bmvc_to_teaching -o StrictHostKeyChecking=no" \
+      teaching@<src>:dehazing-compression/<path> \
+      /data1/tushar/bmvc/<path>'
+```
+Local just sends a few KB of command text; bytes flow `<src> → rudra`
+over LAN.
+
+### Honest disclosure
+~590 MB of pre-rule pulls (DeHamer indoor teacher + student A best.pt)
+already crossed the developer's home connection before this rule existed.
+Those local files have been deleted; the rule applies to all subsequent
+transfers.
+
+---
+
+## 2026-05-23/24 — Cluster re-bootstrap + outdoor student kickoff + BMVC strengthening plan
+
+### State of the world at session open
+- `adu` conda env on 172.18.40.119 wiped (envs dir empty); `/home/teaching/miniconda3/envs/` had only a stale `.conda_envs_dir_test` marker.
+- Project files (`dehazing-compression/`), all teacher checkpoints (4 splits), all student `best.pt` (A/B/C), and `/DATA/datasets/dehazing/RESIDE/{SOTS-Test,Dense-Haze,NH-HAZE}` were intact.
+- Cross-domain eval JSONs (12 files: 3 students × 3 splits + teacher × 3 splits) were on the cluster from 2026-05-13 but **not yet on local** — pulled this session.
+
+### Cluster rebuild on 172.18.40.119
+- Discovered `~/.condarc` redirects new envs to `/DATA/joshi/envs/`; created env there and symlinked `/home/teaching/miniconda3/envs/adu → /DATA/joshi/envs/adu` so `.env` paths stay valid.
+- Conda `create -n adu python=3.11`, then `conda install -n adu pip`, then `pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121`, then `pip install scikit-image einops gdown timm pyyaml tqdm pillow opencv-python ptflops wandb`. Verified `torch 2.5.1+cu121`, CUDA available on RTX A5000.
+- Smoke eval: ran Student B on SOTS-indoor with rebuilt env. Reproduced **34.398 / 0.9865** (3-decimal match with the existing JSON). Env is healthy.
+
+### OTS dataset acquisition
+- `/DATA/datasets/dehazing/RESIDE/OTS/` was empty (only stale 0-byte `ITS.zip` and `SOTS.zip` parked at parent). RESIDE bit.ly link still dead → used DeHamer GDrive folder ID `1i_tW1axmOjOy1InX1o3iS1nLnJ8TND7f`.
+- Folder turned out to be just **3 files**, not 313K individual: `clear_images.zip` (1.2GB), `haze.zip` (46.3GB), `trainlist.txt`. gdown finished in ~22 min @ ~30-50 MB/s.
+- `haze.zip` unpacks to 3 nested zips (`part1/2/3.zip`, 17+14+14 GB). Unzipped all three (~14 min total on HDD). Total: **313,947 hazy jpgs + 8,970 clean jpgs** (RESIDE OTS official is 313,950 + 8,970 — within rounding).
+- Flattened the part subdirs into a single `OTS/haze/` directory via `find part{1,2,3} -name '*.jpg' -print0 | xargs -0 mv -t .` — same-filesystem renames, ~10 seconds for 313K files.
+- Symlinked `OTS/clear → clear_images` so `launch_outdoor_student.sh`'s `OTS_CLEAN` path resolves.
+
+### Outdoor student pipeline launch
+- `scripts/launch_outdoor_student.sh` (Step 1 soft labels → Step 2 train → Step 3 eval) kicked off in tmux `outdoor` on 172.18.40.119.
+- **Step 1: outdoor DeHamer soft labels on 50K OTS subset.** ~8 img/s on A5000 (GPU 19-37% util); completed in ~1h45m. Written to `experiments/soft_labels/dehamer_outdoor/` (50,000 PNGs).
+- **Step 2: training crashed immediately** — cluster had stale `data/reside.py` (no `max_samples` kwarg, added locally 2026-05-13). Soft labels survived intact (skip-existing).
+- Synced latest code via `scripts/sync_to_cluster.sh`; archived the crashed log as `phase2_haze_outdoor_b.log.crashed_20260524`; relaunched in tmux `outdoor` at 16:26 IST. Step 1 skipped all 50K in 0.7s, Step 2 training now alive: ep000, ~3.5 it/s, 6,250 steps/epoch × 200 epochs.
+- Realistic ETA: **~36-48 h** for training (not the 10h the launch script comment claimed — 50K OTS is 3.6× larger than indoor's ITS).
+
+### Documentation work
+- Wrote **`RESULTS.md`** — flat consolidated snapshot of every method, result, ablation we have. 7 sections: hardware reference, teacher numbers, Phase 1 PTQ (method + 6-row table + top-8 sensitivity), Phase 2 distillation (method + 2x2 ablation + cross-domain table + latency table + compression summary), open BMVC blockers, artefact index, reproduction commands. Committed as `2368ddc` along with the 12 cross-domain eval JSONs.
+- This `Update.md` entry written 2026-05-24 morning IST while outdoor training is still in epoch 0.
+
+### BMVC strengthening plan (parallel multi-node)
+- Decided to queue the four highest-leverage BMVC-strengthening tracks in parallel on the rest of the teaching nodes, while 119 stays on the outdoor student:
+  1. **Lightweight baselines** (AOD-Net, FFA-Net, gUNet/MixDehazeNet) on SOTS-indoor + outdoor.
+  2. **Figures**: Pareto plot (PSNR vs params) + sensitivity heatmap. Pure local matplotlib, no compute.
+  3. **RTTS qualitative + FADE no-ref metric.** Closes the synthetic-only-eval rejection vector.
+  4. **Sensitivity-driven distillation** (T2 #7) — fork train.py to pick decoder feature taps via the per-layer sensitivity ranking from Phase 1. Ties Phase 1 ↔ Phase 2 into one method instead of two stapled ones.
+- Per-node assignment + code files will live in `RUNS_PARALLEL.md` (new) as it lands.
+
+---
+
 ## 2026-05-13 — Cross-dataset eval expansion + outdoor student plan
 
 ### Decisions
