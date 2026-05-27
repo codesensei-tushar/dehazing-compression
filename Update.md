@@ -2,6 +2,44 @@
 
 One-liners; most recent at top. Times approximate (local).
 
+## 2026-05-27 — Jobs rescued + RTTS/sensitivity-distill results pulled
+
+### Job statuses as of 2026-05-27 IST
+
+**Job D (113) — sensitivity-driven distillation: COMPLETE**
+- `haze_b_sens` (NAFNet-32, 17.1M params) trained 200 epochs on ITS.
+- Indoor SOTS: **34.555 dB / 0.9875 SSIM** — marginal +0.15 dB over `haze_b_large_tight` (same arch, uniform taps).
+- Cross-domain outdoor SOTS: **20.29 dB / 0.854 SSIM** (expected — indoor-trained).
+- Latency: **23 ms / 43 FPS @ 256**, 33 ms / 30 FPS @ 512.
+- Eval JSONs pulled to `results/eval_student_haze_b_sens{,_outdoor}.json`.
+- `best.pt` pushed to `rudra:/data1/tushar/bmvc/experiments/students/haze_b_sens/` over LAN.
+
+**Job C (139) — RTTS no-reference eval: COMPLETE**
+- Ran all 5 models over 4,322 real hazy RTTS images; NIQE + BRISQUE via pyiqa.
+- Key finding: teacher DeHamer (NIQE 4.80, BRISQUE 29.1) barely beats hazy baseline (4.94/30.8); distilled students score drastically worse (w16: 12.9/101.7; w32 GT: 31.7/139.6; w32 pseudo: 62.0/153.8). Synthetic-ITS training does not transfer to real haze.
+- This is an honest limitation, not a suppressed result; will be framed as such in the paper.
+- Eval JSONs pulled to `results/rtts_*.json`.
+
+**Job A (133) — baselines (AOD-Net + FFA-Net): PARTIAL → relaunched**
+- AOD-Net trained 200 epochs (ckpt `experiments/baselines/aodnet_indoor.pth`, 11 KB).
+- Eval crashed: `ModuleNotFoundError: No module named 'skimage'`.
+- Fix: `pip install scikit-image` on 133, relaunched `run_baselines.sh`. AOD-Net eval running; FFA-Net (~3-5h) next.
+
+**Job 0 (119) — outdoor haze student: CRASHED → relaunched**
+- Crashed at first validation: `SOTSEvalDataset` only globbed `*.png`; SOTS-outdoor hazy files are `.jpg` → 0 val pairs → `np.min([])` ValueError.
+- Fix: updated `data/reside.py` `SOTSEvalDataset.__init__` to glob `*.jpg` too (4-line change).
+- Verified fix: 500 val pairs confirmed on 119 after sync.
+- Relaunched; currently ep 000 at ~3-4 it/s (50K × 200 ep ≈ 36-48h ETA).
+
+### Artifacts committed this session
+- `data/reside.py` — SOTSEvalDataset jpg fix
+- `results/eval_student_haze_b_sens{,_outdoor}.json` — sensitivity-distill eval
+- `results/rtts_*.json` (5 files) — RTTS NIQE/BRISQUE per model
+- `results/training_summary.json` — haze_b_sens training summary
+- `results/phase2_haze_b_sens_status.txt` — DONE marker
+
+---
+
 ## 2026-05-26 — Big-file routing through rudra hub; no more local relays
 
 ### Why

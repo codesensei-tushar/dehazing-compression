@@ -1,0 +1,12 @@
+{
+  "model": "student",
+  "tag": "haze_a_small_tight",
+  "ckpt": "/home/teaching/dehazing-compression/experiments/students/haze_a_small_tight/best.pt",
+  "device": "cuda",
+  "gpu": "NVIDIA RTX A5000",
+  "n_images": 4322,
+  "out_dir": "/home/teaching/dehazing-compression/results/rtts_haze_a_small_tight",
+  "wall_time_s": 211.68664168300165,
+  "niqe_mean": 12.87417071425784,
+  "brisque_mean": 101.7359922515855
+}

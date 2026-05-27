@@ -123,7 +123,10 @@ class SOTSEvalDataset(Dataset):
         self.hazy_dir = Path(hazy_dir)
         self.gt_dir = Path(gt_dir)
         self.pairs: list[tuple[Path, Path]] = []
-        for h in sorted(self.hazy_dir.glob("*.png")):
+        hazy_files = sorted(
+            list(self.hazy_dir.glob("*.png")) + list(self.hazy_dir.glob("*.jpg"))
+        )
+        for h in hazy_files:
             stem = _gt_stem(h.name)
             for ext in (".png", ".jpg"):
                 gt = self.gt_dir / (stem + ext)

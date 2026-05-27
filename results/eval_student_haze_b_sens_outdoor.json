@@ -1,0 +1,36 @@
+{
+  "model": "NAFNet-student",
+  "tag": "haze_b_sens",
+  "split": "outdoor",
+  "ckpt": "/home/teaching/dehazing-compression/experiments/students/haze_b_sens/best.pt",
+  "best_psnr_train_reported": 34.555322065047896,
+  "epoch_saved": 199,
+  "n_params": 17111907,
+  "params_M": 17.112,
+  "device": "cuda",
+  "width": 32,
+  "train_config": {
+    "width": null,
+    "lambda_feat": null,
+    "lambda_perc": null,
+    "use_pseudo_as_target": null,
+    "epochs": null,
+    "batch": null,
+    "patch": null
+  },
+  "eval": {
+    "psnr_mean": 20.288159462000518,
+    "ssim_mean": 0.8538635309391569,
+    "psnr_min": 11.067840577534199,
+    "psnr_max": 31.7886381470694,
+    "ssim_min": 0.6000189206601707,
+    "ssim_max": 0.9815698555680424,
+    "n_images": 500,
+    "wall_time_s": 37.78761445501004,
+    "ms_per_img": 75.57522891002009
+  },
+  "latency_ms_256": 21.50513671875,
+  "latency_ms_512": 33.7289306640625,
+  "fps_256": 46.500518135656186,
+  "fps_512": 29.64813826918859
+}

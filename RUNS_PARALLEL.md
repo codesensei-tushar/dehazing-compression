@@ -3,7 +3,7 @@
 Per-node assignment + live status for the four parallel BMVC-strengthening
 tracks. Updated by hand as each job's state changes.
 
-Snapshot: **2026-05-26 12:48 IST**.
+Snapshot: **2026-05-27 15:30 IST**.
 
 ## Topology
 
@@ -21,29 +21,29 @@ currently used only as hub, not as a worker.
 
 ## Per-job registry
 
-### Job 0 — Outdoor student (running)
+### Job 0 — Outdoor student (running — relaunched 2026-05-27)
 - **Node:** `teaching@172.18.40.119`
 - **Tag:** `haze_outdoor_b`
 - **Code:** `scripts/launch_outdoor_student.sh` → `phase2_distill/train.py`
-- **Data:** `/DATA/datasets/dehazing/RESIDE/OTS/` (313,947 hazy + 8,970 clean) + indoor soft labels reused, outdoor DeHamer teacher
-- **Launched:** 2026-05-24 16:26 IST (tmux session `outdoor`)
+- **Data:** `/DATA/datasets/dehazing/RESIDE/OTS/` (313,947 hazy + 8,970 clean) + outdoor DeHamer soft labels (50K, pregenerated)
+- **Launched:** 2026-05-27 15:27 IST (nohup; first launch on 2026-05-24 crashed at validation — `SOTSEvalDataset` only globbed `*.png`, SOTS-outdoor hazy files are `.jpg` → 0 val pairs → fixed in `data/reside.py`)
 - **Output:** `results/phase2_haze_outdoor_b.log`, `experiments/students/haze_outdoor_b/best.pt`
-- **Realistic ETA:** ~36–48 h from launch (50K OTS pairs × 200 ep, ~3.5 it/s)
-- **Status:** training in progress
+- **Realistic ETA:** ~36–48 h from relaunch
+- **Status:** training in progress (ep 000, ~3-4 it/s)
 
-### Job A — Lightweight baselines (running)
+### Job A — Lightweight baselines (running — relaunched 2026-05-27)
 - **Node:** `teaching@172.18.40.133`
 - **Tags:** `aodnet` + `ffanet` (eval JSONs)
 - **Code:** `scripts/run_baselines.sh` → `evaluate/train_aodnet.py` (200 ep) → `evaluate/train_ffanet.py` (100 ep) → `evaluate/eval_baseline.py`
-- **Data on node:** ITS-Train (4.3 GB) + SOTS-Test (419 MB) under `/DATA/datasets/dehazing/RESIDE/` (gdown'd this session)
-- **Ckpts on node:** DeHamer indoor teacher (537 MB, pushed from local relay 2026-05-25 before the no-local rule landed)
-- **Launched:** 2026-05-26 12:32 IST (nohup, no tmux on 133)
+- **Data on node:** ITS-Train (4.3 GB) + SOTS-Test (419 MB) under `/DATA/datasets/dehazing/RESIDE/`
+- **Ckpts on node:** DeHamer indoor teacher (pushed rudra→133 via LAN)
+- **Launched:** relaunched 2026-05-27 15:29 IST after `scikit-image` install; original run on 2026-05-26 12:32 completed AOD-Net training (200 ep) then failed eval: `ModuleNotFoundError: No module named 'skimage'`
 - **Output:**
   - `results/baselines.log`
-  - `experiments/baselines/aodnet_indoor.pth`, `experiments/baselines/ffanet_indoor.pth`
-  - `results/eval_baseline_{aodnet,ffanet}_{indoor,outdoor}.json` (×4)
-- **Realistic ETA:** AOD-Net ~30 min train + 2 min eval × 2 splits, then FFA-Net ~3–5 h train + 5 min × 2 evals. Total ~4–6 h.
-- **Status:** AOD-Net training, epoch 1/200 at 41% (5 it/s)
+  - `experiments/baselines/aodnet_indoor.pth` (already done), `experiments/baselines/ffanet_indoor.pth` (pending)
+  - `results/eval_baseline_{aodnet,ffanet}_{indoor,outdoor}.json` (×4, pending)
+- **Realistic ETA:** AOD-Net eval ~4 min, then FFA-Net ~3–5 h train + eval
+- **Status:** AOD-Net eval running; FFA-Net train next
 
 ### Job B — Pareto + sensitivity heatmap + cross-domain figures (complete)
 - **Node:** LOCAL (no GPU needed)
@@ -51,31 +51,36 @@ currently used only as hub, not as a worker.
 - **Outputs:** `results/figures/{pareto_with_baselines,sensitivity_heatmap,cross_domain_bars}.png`
 - **Status:** done 2026-05-25; committed in `9c31f66`.
 
-### Job C — RTTS + no-reference (BLOCKED)
+### Job C — RTTS + no-reference (COMPLETE)
 - **Node:** `teaching@172.18.40.139`
 - **Tags:** `rtts_hazy`, `dehamer_indoor`, `haze_a_small_tight`, `haze_b_large_tight`, `haze_c_large_pseudo`
 - **Code:** `scripts/run_rtts_all.sh` → `evaluate/eval_rtts.py` → `evaluate/fade.py`
-- **Data on node:** DeHamer indoor teacher ✓, 3 student best.pt's ✓ (pushed rudra→139 2026-05-26 12:24)
-- **Blocker:** RTTS dataset (4,322 real hazy images, ~280 MB) — placeholder GDrive ID in `scripts/download_rtts.sh` is unverified and may fail. Need either:
-  - A verified RTTS GDrive ID, or
-  - A direct download URL, or
-  - Kaggle credentials + dataset slug
-- **Realistic ETA once unblocked:** ~30 min (pyiqa install + ~5 models × ~1 min/run).
-- **Status:** all dependencies in place, awaiting data source.
+- **Completed:** 2026-05-26 ~13:30 IST
+- **Results (NIQE ↓ / BRISQUE ↓, 4322 real hazy images):**
+  | Model | NIQE | BRISQUE |
+  |---|---:|---:|
+  | Hazy passthrough | 4.94 | 30.78 |
+  | DeHamer teacher | **4.80** | **29.10** |
+  | haze_a_small_tight (w16) | 12.87 | 101.74 |
+  | haze_b_large_tight (w32) | 31.74 | 139.59 |
+  | haze_c_large_pseudo (w32 pseudo) | 61.98 | 153.82 |
+- **Finding:** students overtrained on synthetic ITS degrade severely on real haze (domain gap). Teacher barely improves over hazy. Framed as limitation in paper.
+- **Eval JSONs:** `results/rtts_*.json` (5 files) committed locally.
+- **Status:** DONE
 
-### Job D — Sensitivity-driven distillation (running)
+### Job D — Sensitivity-driven distillation (COMPLETE)
 - **Node:** `teaching@172.18.40.113`
 - **Tag:** `haze_b_sens`
 - **Code:** `scripts/launch_sensitivity_student.sh` → `phase2_distill/train_sensitivity_taps.py`
-- **Data on node:** ITS-Train (4.3 GB) + SOTS-Test (419 MB) — gdown'd this session
-- **Ckpts on node:** DeHamer indoor teacher (pushed 2026-05-25)
-- **Launched:** 2026-05-26 12:43 IST (nohup, no tmux on 113)
-- **Output:**
-  - `results/phase2_haze_b_sens.log`, `results/phase2_haze_b_sens_status.txt`
-  - `experiments/students/haze_b_sens/best.pt`, `epoch_*.pt`, `training_summary.json`
-  - Then `results/eval_student_haze_b_sens_{indoor,outdoor}.json`
-- **Realistic ETA:** ~16 h training (1748 steps/ep × 200 ep at ~6 it/s) + eval
-- **Status:** ep 0 at 26% (6 it/s, loss 0.15–0.22)
+- **Completed:** 2026-05-27 03:08 IST (launched 2026-05-26 12:43 IST, ~14.4 h)
+- **Results:**
+  - Indoor SOTS: **34.555 dB / 0.9875 SSIM** (ep 199 best)
+  - Cross-domain outdoor SOTS: **20.29 dB / 0.854 SSIM**
+  - Latency: **23 ms / 43 FPS @ 256²**, 33 ms / 30 FPS @ 512²
+  - Params: 17.11M
+- **Interpretation:** +0.15 dB over `haze_b_large_tight` (34.40) — sensitivity-weighted taps marginally outperform uniform taps. Ties Phase 1 sensitivity analysis into Phase 2 method.
+- **Artifacts:** eval JSONs in `results/`; `best.pt` pushed to `rudra:/data1/tushar/bmvc/experiments/students/haze_b_sens/`
+- **Status:** DONE
 
 ## SSH quick-attach
 

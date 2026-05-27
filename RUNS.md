@@ -35,6 +35,8 @@ Switch `./gpu` to another node: edit `.env` (`CLUSTER_HOST`) and re-source.
 | `haze_a_small_tight` *(completed)* | `teaching@172.18.40.103` | 4.35M (w16) | GT | 0.05 | 0.05 | nohup (no tmux) | 32.39 dB / 0.9829 @ ep184 |
 | `haze_b_large_tight` *(completed)* | `teaching@172.18.40.103` | 17.11M (w32) | GT | 0.05 | 0.05 | nohup (no tmux) | 34.40 dB / 0.9865 @ best |
 | `haze_c_large_pseudo` *(completed)* | `teaching@172.18.40.103` | 17.11M (w32) | Pseudo (teacher output) | 0.00 | 0.05 | `phase2_haze_c_large_pseudo` | 33.87 dB / 0.9834 @ best |
+| `haze_b_sens` *(completed)* | `teaching@172.18.40.113` | 17.11M (w32) | GT | sensitivity-weighted | 0.05 | nohup | **34.555 dB / 0.9875 @ ep199** |
+| `haze_outdoor_b` *(running)* | `teaching@172.18.40.119` | 17.11M (w32) | GT | 0.05 | 0.05 | nohup | in progress (relaunched 2026-05-27, ~36-48h ETA) |
 
 Each training run persists:
 - `results/phase2_<tag>.log` — full stdout tee

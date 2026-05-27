@@ -1,0 +1,12 @@
+{
+  "model": "hazy_passthrough",
+  "tag": "rtts_hazy",
+  "ckpt": null,
+  "device": "cuda",
+  "gpu": "NVIDIA RTX A5000",
+  "n_images": 4322,
+  "out_dir": "/home/teaching/dehazing-compression/results/rtts_rtts_hazy",
+  "wall_time_s": 218.64285696900333,
+  "niqe_mean": 4.937742484179337,
+  "brisque_mean": 30.77568551998677
+}

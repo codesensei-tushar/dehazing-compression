@@ -1,0 +1,12 @@
+{
+  "model": "teacher",
+  "tag": "dehamer_indoor",
+  "ckpt": "/home/teaching/dehazing-compression/experiments/teachers/dehamer/ckpts/indoor/PSNR3663_ssim09881.pt",
+  "device": "cuda",
+  "gpu": "NVIDIA RTX A5000",
+  "n_images": 4322,
+  "out_dir": "/home/teaching/dehazing-compression/results/rtts_dehamer_indoor",
+  "wall_time_s": 392.3334553570021,
+  "niqe_mean": 4.795967434703355,
+  "brisque_mean": 29.100594043511034
+}
