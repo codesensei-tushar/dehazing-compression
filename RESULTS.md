@@ -1,7 +1,7 @@
 # Results, Methods, Ablations — Consolidated Snapshot
 
 Single source-of-truth dump of every method run, result measured, and ablation
-populated so far. Target: BMVC submission. Snapshot date: **2026-05-23**.
+populated so far. Target: BMVC submission. Snapshot date: **2026-05-27**.
 
 Living narrative is in `README.md`; chronological log in `Update.md`; run
 registry in `RUNS.md`; submission readiness in `Checklist.md`. This file is the
@@ -56,7 +56,13 @@ Source: `results/latency_isolated_dehamer_teacher.json`.
 
 ## 3. Phase 1 — Post-Training Quantization of DeHamer
 
-### 3.1 Method
+### 3.1 Method (reframed: sensitivity analysis, not GPU speedup)
+
+The Phase-1 contribution is **a layer-wise sensitivity ranking of DeHamer's
+Swin trunk under quantisation**, used to (a) construct mixed-precision INT8
+configurations that preserve PSNR within noise, and (b) seed the per-stage
+feature-tap weights in Phase 2 (§4.6). It is *not* a GPU speedup study —
+PyTorch's dynamic INT8 path is CPU-only and our 1.27× CPU speedup is incidental.
 
 DeHamer is a hybrid model: CNN encoder + 3-stage Swin transformer with
 3D position embedding + CNN decoder. PTQ pipeline:
@@ -156,8 +162,9 @@ DeHamer indoor checkpoint as teacher. Evaluated on SOTS-indoor 500 pairs.
 |------|--------------------------|-------|--------|--------|--------|--------|-------|--------|------------|
 | —    | `haze_s1` (early)        | 16    | 4.35M  | GT     | 0.01   | 0.00   | 29.78 | 0.9675 | 194        |
 | A    | `haze_a_small_tight`     | 16    | 4.35M  | GT     | 0.05   | 0.05   | 32.39 | 0.9829 | 184        |
-| B    | `haze_b_large_tight`     | 32    | 17.11M | GT     | 0.05   | 0.05   | **34.40** | **0.9865** | 184    |
+| B    | `haze_b_large_tight`     | 32    | 17.11M | GT     | 0.05   | 0.05   | 34.40 | 0.9865 | 184        |
 | C    | `haze_c_large_pseudo`    | 32    | 17.11M | Pseudo | 0.00   | 0.05   | 33.87 | 0.9834 | best       |
+| D    | **`haze_b_sens`** (sensitivity-driven) | 32 | 17.11M | GT | per-stage weighted | 0.05 | **34.56** | **0.9875** | 199 |
 
 `haze_s1` is the early run that exposed the tight-loss / capacity gap and
 motivated the three-way split; not in the headline table.
@@ -170,6 +177,12 @@ motivated the three-way split; not in the headline table.
 - **Loss weighting (`haze_s1` 0.01/0 → `A` 0.05/0.05):** +2.6 dB at the same
   capacity. Underweighted feature + zero perceptual was the original failure
   mode.
+- **Sensitivity-driven feature taps (B uniform → D sensitivity-weighted):**
+  +0.16 dB (34.40 → 34.56) at identical capacity. The Phase-1 per-Linear ΔPSNR
+  ranking is aggregated into a per-Swin-stage weight vector; the student's
+  decoder taps are matched to teacher stages with weights proportional to
+  stage sensitivity. Closes the loop between Phase 1 and Phase 2 into a single
+  method instead of two independent contributions. See §4.6 for the recipe.
 
 ### 4.3 Cross-domain evaluation (indoor students → outdoor / dense / NH)
 
@@ -236,6 +249,88 @@ artefact and has been retracted.
 Pareto: B is the quality-best at fixed capacity; A is the extreme-lightweight
 operating point (30× smaller, ~4 dB gap, still SOTS-grade SSIM).
 
+### 4.6 Sensitivity-driven feature taps (D = `haze_b_sens`)
+
+The contribution that ties Phase 1 to Phase 2 into one method.
+
+**Recipe:**
+1. From `dehamer_sensitivity_indoor.json` (§3.3): per-Linear |ΔPSNR| ranking
+   across the 26 Swin Linear modules.
+2. Aggregate per-module values into a 3-element per-Swin-stage weight vector
+   (sum |ΔPSNR| over modules belonging to `swin_1.layers.{0,1,2}`), then
+   L1-normalise.
+3. Hook teacher at `swin_1.layers.{0,1,2}` to capture stage outputs;
+   `MultiTapDistillLoss` weights the per-stage L_feat by the normalised
+   stage weights.
+4. On the student side, `NAFNetStudentMultiTap` exposes one feature per
+   decoder block; each is bilinearly resampled + 1×1-conv-adapted to match
+   the teacher stage's spatial × channel shape.
+
+**Result vs uniform-tap baseline:** +0.16 dB indoor (34.40 → 34.56) at identical
+parameter count, identical training schedule. Latency is actually better than
+B (32.9 → 23.1 ms at 256², `latency_isolated_haze_b_sens.json`), suggesting
+the channel-adapter path is faster than B's wider decoder layout — measurement
+to be re-confirmed under matched warmup.
+
+**Files:**
+- `phase2_distill/train_sensitivity_taps.py` — training script with
+  `stage_weights()`, `TeacherStageTaps`, `MultiTapDistillLoss`.
+- `models/students/nafnet_student_multitap.py` — student wrapper returning
+  `(out, feats)`.
+- `results/eval_student_haze_b_sens{,_outdoor}.json`.
+
+### 4.7 Cross-domain (real RTTS, no-reference)
+
+5 models run over 4,322 real RTTS hazy images. `evaluate/eval_rtts.py` +
+`evaluate/fade.py` (pyiqa NIQE + BRISQUE wrappers). Source:
+`results/rtts_*.json`.
+
+| Model                     | NIQE ↓ | BRISQUE ↓ | wall (s) |
+|---------------------------|------:|---------:|---------:|
+| Hazy passthrough (no dehaze) | 4.94 | 30.78    | 218.6    |
+| **DeHamer indoor teacher**   | **4.80** | **29.10** | 392.3 |
+| Student A (w16, GT)          | 12.87 | 101.74  | 211.7    |
+| Student B (w32, GT)          | 31.74 | 139.59  | 204.9    |
+| Student C (w32, pseudo)      | 61.98 | 153.82  | 208.1    |
+
+**Honest finding (limitation):** indoor-ITS-trained students do *not* transfer
+to real haze. Bigger student → worse on real RTTS, consistent with overfitting
+the ITS synthetic distribution. The teacher barely improves over no-dehazing
+(NIQE 4.80 vs 4.94) — DeHamer indoor itself was trained on the same
+synthetic distribution. Discussed as the primary limitation; future work
+points to real-data fine-tuning or domain-adaptive distillation.
+
+### 4.8 External lightweight baseline (AOD-Net)
+
+| Model               | Params | Indoor PSNR | Indoor SSIM | Outdoor PSNR | 256² FPS | 512² FPS |
+|---------------------|-------:|------------:|------------:|-------------:|---------:|---------:|
+| **AOD-Net** (ours, retrained) | **0.002M** | 20.73 | 0.817 | 19.39 | **2403** | 670 |
+| FFA-Net (ours, retrained) | 4.46M | *running ep 31/100 on 133* | — | — | — | — |
+
+AOD-Net establishes the "free" end of the Pareto plot: 2,000× fewer params
+than the teacher, ~16 dB below teacher quality on indoor, but 33× faster
+than our fastest student. It is the speed-only floor; everything between
+AOD-Net and DeHamer should fall along the Pareto front.
+
+Published numbers (SOTS-indoor PSNR), quoted for the comparison table:
+
+| Method            | PSNR  | SSIM  | Params  | Source |
+|-------------------|------:|------:|--------:|--------|
+| AOD-Net           | 19.06 | 0.850 | 0.002M  | Li et al., ICCV 2017 |
+| DehazeNet         | 21.14 | 0.847 | 0.01M   | Cai et al., TIP 2016 |
+| GridDehazeNet     | 32.16 | 0.984 | 0.96M   | Liu et al., ICCV 2019 |
+| FFA-Net           | 36.39 | 0.989 | 4.46M   | Qin et al., AAAI 2020 |
+| MSBDN-DFF         | 33.67 | 0.985 | 31.4M   | Dong et al., CVPR 2020 |
+| AECR-Net          | 37.17 | 0.990 | 2.61M   | Wu et al., CVPR 2021 |
+| DehazeFormer-S    | 36.82 | 0.992 | 1.28M   | Song et al., TIP 2023 |
+| MixDehazeNet-L    | 42.62 | 0.997 | 12.4M   | Lu et al., 2024 |
+| DeHamer (teacher) | 36.63 | 0.988 | 132.5M  | Guo et al., CVPR 2022 |
+| **Ours (D, haze_b_sens)** | **34.56** | **0.988** | **17.1M** | this work |
+
+Our published number is competitive in the mid-tier (above MSBDN-DFF, below
+the newer attention-heavy nets) and is the only entry built via
+sensitivity-driven distillation from a transformer teacher.
+
 ---
 
 ## 5. What is NOT yet in the table (BMVC §4.2 blockers)
@@ -243,27 +338,33 @@ operating point (30× smaller, ~4 dB gap, still SOTS-grade SSIM).
 These are the cells that remain empty and would each be a row or paragraph in
 the submission:
 
-- **Outdoor student** (`haze_outdoor_b`, w32 GT). OTS dataset just arrived on
-  the cluster (2026-05-23); soft labels + training is the next ~12 h of compute.
-  Will populate the "outdoor / condition-matched student" cell.
-- **Rain student** (NAFNet w32 on Rain13K, Restormer deraining teacher).
-  Materialises the "one recipe, two degradation types" version of the
-  contribution. Restormer ckpt is on disk; Rain13K not yet pulled.
-- **External lightweight baselines.** AOD-Net (~2K params) and FFA-Net on
-  SOTS-indoor — either rerun on the same A5000 or quoted from their papers
-  with citations. Required to anchor the comparison table.
-- **Real-world qualitative + FADE.** RTTS (4,332 unpaired images) for the
-  qualitative panel + FADE no-reference score. Synthetic-only eval is the
-  single most common rejection reason for dehazing papers.
+- **Outdoor student** (`haze_outdoor_b`, w32 GT, OTS-trained). Currently
+  training on 172.18.40.119 at ep 180/200 as of 2026-05-27 15:30 IST
+  (eval pending). First indoor-vs-outdoor *condition-matched* row.
+- **FFA-Net retraining** (`ffanet_indoor.pth`). On 133, ep 31/100, best ckpt
+  saved (loss 0.021). Will be quoted alongside AOD-Net as a same-A5000
+  apples-to-apples lightweight CNN baseline.
+- **Rain student** (NAFNet w32 on Rain13K, Restormer deraining teacher). Not
+  started this BMVC cycle — paper will be framed dehazing-only.
+- **Real-world fine-tune (RTTS gap closure).** Current RTTS evaluation is a
+  limitation, not a contribution. A one-pass real-data fine-tune row (5–10
+  epochs on RTTS hazy + teacher-pseudo) would turn the gap into a story.
+  Optional; not on the critical path.
 - **Restormer-teacher track (Tier-1 only).** Fine-tune Restormer deraining
   ckpt on ITS, then run Phase 1 + Phase 2. Promotes the contribution from
-  "compress one transformer" to "compress two under one recipe."
+  "compress one transformer" to "compress two under one recipe." Skipped
+  for BMVC.
 - **GPU INT8 deployment study (Tier-1 only).** TensorRT or `torchao` pt2e on
-  the student. FP16 vs INT8 latency on A5000.
+  the student. FP16 vs INT8 latency on A5000. Skipped for BMVC.
 - **Manuscript.** No `.tex` exists yet; `abstract.txt` has a draft title +
   abstract (committed 2026-05-23). LaTeX skeleton (IEEEtran) to come.
-- **Figures.** Pareto plot, sensitivity heatmap, qualitative side-by-side,
-  2×2 ablation bar chart.
+- **Figures.**
+  - Pareto plot: `results/figures/pareto_with_baselines.png` — regenerate
+    with real measured AOD-Net + sensitivity-distill rows once 133 finishes.
+  - Sensitivity heatmap: `results/figures/sensitivity_heatmap.png` — done.
+  - Qualitative side-by-side: not yet — needs a script that emits
+    hazy / teacher / student-D / GT panels on a fixed set of SOTS-indoor +
+    RTTS images. ~2h to implement.
 
 `Checklist.md` is the authoritative tracker; this section is a summary.
 

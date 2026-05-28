@@ -1,0 +1,24 @@
+{
+  "model": "aodnet",
+  "tag": "aodnet",
+  "split": "indoor",
+  "ckpt": "/home/teaching/dehazing-compression/experiments/baselines/aodnet_indoor.pth",
+  "params_M": 0.002,
+  "device": "cuda",
+  "gpu": "NVIDIA RTX A5000",
+  "eval": {
+    "psnr_mean": 20.729471739061456,
+    "ssim_mean": 0.8174282038833147,
+    "psnr_min": 11.000004545603643,
+    "psnr_max": 27.241637139180895,
+    "ssim_min": 0.5939763955424548,
+    "ssim_max": 0.926369772346118,
+    "n_images": 500,
+    "wall_time_s": 25.18058868602384,
+    "ms_per_img": 50.36117737204768
+  },
+  "latency_ms_256": 0.41612289428710936,
+  "latency_ms_512": 1.4929507446289063,
+  "fps_256": 2403.1362218442064,
+  "fps_512": 669.8144621298701
+}
